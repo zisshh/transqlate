@@ -59,7 +59,7 @@ ds = raw_ds.map(format_prompt, remove_columns=raw_ds["train"].column_names)
 # 4  Training hyper-parameters   #
 # ----------------------------- #
 #   GPU    : L4 24 GB (bf16 + 4-bit)
-#   Batch  : 6 × 2 K tokens in VRAM  → ≈9 K tokens
+#   Batch  : 6 × 2 K tokens in VRAM  → ≈12 K tokens
 #   Acc.Steps : 8 → Eff. batch ≈48 K tokens / step
 BATCH_SIZE    = 6
 ACC_STEPS     = 8
