@@ -1,4 +1,17 @@
-torch
-unsloth
-datasets
-transformers
+# Core Libraries
+torch==2.4.0
+transformers>=4.40.0
+datasets>=2.18.0
+
+# Unsloth (optimized for CUDA 12.4 and PyTorch 2.4)
+unsloth[cu124-torch240] @ git+https://github.com/unslothai/unsloth.git
+
+# FlashAttention (ensure compatibility with PyTorch 2.4 and CUDA 12.4)
+flash-attn==2.7.4.post1
+
+# Additional Dependencies
+xformers>=0.0.30
+bitsandbytes>=0.42.0
+triton>=3.0.0
+ninja
+packaging
