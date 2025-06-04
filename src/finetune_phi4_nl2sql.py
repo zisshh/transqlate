@@ -33,7 +33,7 @@ if __name__ == "__main__":
         dtype                 = DTYPE,
         max_seq_length        = MAX_SEQ_LEN,
         load_in_4bit          = True,        # QLoRA
-        use_flash_attention_2 = True,        # saves ⇢ 15-20 % VRAM
+        attn_implementation   = "flash_attention_2",        # saves ⇢ 15-20 % VRAM
         device_map            = "auto",
     )
 
