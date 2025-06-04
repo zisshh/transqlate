@@ -1,6 +1,10 @@
 # Fine-tune Microsoft Phi-4 Mini-Instruct (3.8 B) for NL→SQL with Unsloth QLoRA
 # Hardware target: 1× NVIDIA L4 (24 GB VRAM)
 
+from pathlib import Path
+
+base_dir = Path(__file__).resolve().parent
+
 
 
 
@@ -54,7 +58,10 @@ if __name__ == "__main__":
     # ----------------------------- #
     # 3  Dataset loading & mapping   #
     # ----------------------------- #
-    data_files = {"train": "train.jsonl", "validation": "val.jsonl"}
+    data_files = {
+        "train": str(base_dir / "train_split.jsonl"),
+        "validation": str(base_dir / "val_split.jsonl"),
+    }
     raw_ds     = load_dataset("json", data_files=data_files)
 
     ds = raw_ds.map(format_prompt, remove_columns=raw_ds["train"].column_names)
@@ -73,7 +80,7 @@ if __name__ == "__main__":
     WEIGHT_DECAY  = 0.01
 
     training_args = TrainingArguments(
-        output_dir                 = "../model/phi4-transqlate-qlora",
+        output_dir                 = str(base_dir.parent / "model" / "phi4-transqlate-qlora"),
         per_device_train_batch_size= BATCH_SIZE,
         per_device_eval_batch_size = BATCH_SIZE,
         gradient_accumulation_steps= ACC_STEPS,
@@ -108,5 +115,6 @@ if __name__ == "__main__":
     # 5  Train & save               #
     # ----------------------------- #
     trainer.train()
-    trainer.model.save_pretrained("../model/phi4-transqlate-qlora")
-    tokenizer.save_pretrained("../model/phi4-transqlate-qlora")
+    output_path = base_dir.parent / "model" / "phi4-transqlate-qlora"
+    trainer.model.save_pretrained(output_path)
+    tokenizer.save_pretrained(output_path)
