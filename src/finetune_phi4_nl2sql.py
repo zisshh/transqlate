@@ -13,8 +13,10 @@ def format_prompt(example):
     }
 
 if __name__ == "__main__":
+    from pathlib import Path
     import torch
-    from unsloth import FastLanguageModel, SFTTrainer
+    from unsloth import FastLanguageModel
+    from unsloth.trainers import SFTTrainer
     from unsloth.chat_templates import get_chat_template
     from datasets import load_dataset
     from transformers import TrainingArguments
@@ -56,9 +58,11 @@ if __name__ == "__main__":
     # ----------------------------- #
     # 3  Dataset loading & mapping   #
     # ----------------------------- #
+    base_dir = Path(__file__).resolve().parent
+    data_dir = base_dir.parent / "data"
     data_files = {
-        "train": str(base_dir / "train_split.jsonl"),
-        "validation": str(base_dir / "val_split.jsonl"),
+        "train": str(data_dir / "train_split.jsonl"),
+        "validation": str(data_dir / "val_split.jsonl"),
     }
     raw_ds = load_dataset("json", data_files=data_files)
 
