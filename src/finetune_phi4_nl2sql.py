@@ -1,6 +1,7 @@
 # Fine-tune Microsoft Phi-4 Mini-Instruct (3.8 B) for NL→SQL with Unsloth QLoRA
 # Hardware target: 1× NVIDIA L4 (24 GB VRAM)
 
+import os
 import torch
 from unsloth import FastLanguageModel, SFTTrainer
 from unsloth.chat_templates import get_chat_template
@@ -45,7 +46,11 @@ FastLanguageModel.print_trainable_parameters(model)  # sanity-check
 # ----------------------------- #
 # 3  Dataset loading & mapping   #
 # ----------------------------- #
-data_files = {"train": "train.jsonl", "validation": "val.jsonl"}
+script_dir = os.path.dirname(os.path.abspath(__file__))
+data_files = {
+    "train": os.path.join(script_dir, "train.jsonl"),
+    "validation": os.path.join(script_dir, "val.jsonl"),
+}
 raw_ds     = load_dataset("json", data_files=data_files)
 
 def format_prompt(example):
