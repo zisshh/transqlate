@@ -68,7 +68,7 @@ ds = raw_ds.map(format_prompt, remove_columns=raw_ds["train"].column_names)
 #   Acc.Steps : 8 → Eff. batch ≈48 K tokens / step
 BATCH_SIZE    = 6
 ACC_STEPS     = 8
-LEARNING_RATE = 2e-4          # QLoRA sweet-spot :contentReference[oaicite:0]{index=0}
+LEARNING_RATE = 2e-4          # QLoRA sweet-spot
 EPOCHS        = 1
 WARMUP_RATIO  = 0.03
 WEIGHT_DECAY  = 0.01
@@ -91,7 +91,7 @@ training_args = TrainingArguments(
     bf16                       = True,
     gradient_checkpointing     = True,
     max_grad_norm              = 1.0,
-    optim                      = "adamw_8bit",  # memory-efficient :contentReference[oaicite:1]{index=1}
+    optim                      = "adamw_8bit",  # memory-efficient
     report_to                  = "tensorboard",        # set to "wandb" if you use it
 )
 
