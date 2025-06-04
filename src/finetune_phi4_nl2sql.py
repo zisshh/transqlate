@@ -16,7 +16,7 @@ if __name__ == "__main__":
     from pathlib import Path
     import torch
     from unsloth import FastLanguageModel
-    from unsloth.trainers import SFTTrainer
+    from unsloth.trainer import SFTTrainer
     from unsloth.chat_templates import get_chat_template
     from datasets import load_dataset
     from transformers import TrainingArguments
