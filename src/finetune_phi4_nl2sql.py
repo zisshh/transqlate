@@ -1,3 +1,5 @@
+# src/finetune_phi4_nl2sql.py
+
 # Fine-tune Microsoft Phi-4 Mini-Instruct (3.8 B) for NL→SQL with Unsloth QLoRA
 # Hardware target: 1× NVIDIA L4 (24 GB VRAM)
 
@@ -5,14 +7,10 @@ from pathlib import Path
 
 base_dir = Path(__file__).resolve().parent
 
-
-
-
 def format_prompt(example):
     return {
         "text": f"{example['instruction']}\n{example['input']}\n\n{example['output']}"
     }
-
 
 if __name__ == "__main__":
     import torch
@@ -29,12 +27,12 @@ if __name__ == "__main__":
     BASE_MODEL         = "unsloth/Phi-4-mini-instruct-unsloth-bnb-4bit"   # 3.8 B
 
     model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name           = BASE_MODEL,
-        dtype                = DTYPE,
-        max_seq_length       = MAX_SEQ_LEN,
-        load_in_4bit         = True,        # QLoRA
-        use_flash_attention_2= True,        # saves ⇢ 15-20 % VRAM
-        device_map           = "auto",
+        model_name            = BASE_MODEL,
+        dtype                 = DTYPE,
+        max_seq_length        = MAX_SEQ_LEN,
+        load_in_4bit          = True,        # QLoRA
+        use_flash_attention_2 = True,        # saves ⇢ 15-20 % VRAM
+        device_map            = "auto",
     )
 
     tokenizer = get_chat_template(tokenizer, chat_template="phi-4")
@@ -48,8 +46,8 @@ if __name__ == "__main__":
         lora_alpha      = 128,              # 2× r
         lora_dropout    = 0.05,
         target_modules  = [
-            "q_proj","k_proj","v_proj","o_proj",
-            "gate_proj","up_proj","down_proj",
+            "q_proj", "k_proj", "v_proj", "o_proj",
+            "gate_proj", "up_proj", "down_proj",
         ],
         bias            = "none",
     )
@@ -62,7 +60,7 @@ if __name__ == "__main__":
         "train": str(base_dir / "train_split.jsonl"),
         "validation": str(base_dir / "val_split.jsonl"),
     }
-    raw_ds     = load_dataset("json", data_files=data_files)
+    raw_ds = load_dataset("json", data_files=data_files)
 
     ds = raw_ds.map(format_prompt, remove_columns=raw_ds["train"].column_names)
 
@@ -70,7 +68,7 @@ if __name__ == "__main__":
     # 4  Training hyper-parameters   #
     # ----------------------------- #
     #   GPU    : L4 24 GB (bf16 + 4-bit)
-    #   Batch  : 6 × 2 K tokens in VRAM  → ≈9 K tokens
+    #   Batch  : 6 × 2 K tokens in VRAM  → ≈12 K tokens
     #   Acc.Steps : 8 → Eff. batch ≈48 K tokens / step
     BATCH_SIZE    = 6
     ACC_STEPS     = 8
@@ -80,35 +78,35 @@ if __name__ == "__main__":
     WEIGHT_DECAY  = 0.01
 
     training_args = TrainingArguments(
-        output_dir                 = str(base_dir.parent / "model" / "phi4-transqlate-qlora"),
-        per_device_train_batch_size= BATCH_SIZE,
-        per_device_eval_batch_size = BATCH_SIZE,
-        gradient_accumulation_steps= ACC_STEPS,
-        evaluation_strategy        = "steps",
-        eval_steps                 = 2500,
-        save_strategy              = "steps",
-        save_steps                 = 2500,
-        logging_steps              = 50,
-        num_train_epochs           = EPOCHS,
-        learning_rate              = LEARNING_RATE,
-        warmup_ratio               = WARMUP_RATIO,
-        lr_scheduler_type          = "cosine",
-        weight_decay               = WEIGHT_DECAY,
-        bf16                       = True,
-        gradient_checkpointing     = True,
-        max_grad_norm              = 1.0,
-        optim                      = "adamw_8bit",  # memory-efficient
-        report_to                  = "tensorboard",        # set to "wandb" if you use it
+        output_dir                  = str(base_dir.parent / "model" / "phi4-transqlate-qlora"),
+        per_device_train_batch_size = BATCH_SIZE,
+        per_device_eval_batch_size  = BATCH_SIZE,
+        gradient_accumulation_steps = ACC_STEPS,
+        evaluation_strategy         = "steps",
+        eval_steps                  = 2500,
+        save_strategy               = "steps",
+        save_steps                  = 2500,
+        logging_steps               = 50,
+        num_train_epochs            = EPOCHS,
+        learning_rate               = LEARNING_RATE,
+        warmup_ratio                = WARMUP_RATIO,
+        lr_scheduler_type           = "cosine",
+        weight_decay                = WEIGHT_DECAY,
+        bf16                        = True,
+        gradient_checkpointing      = True,
+        max_grad_norm               = 1.0,
+        optim                       = "adamw_8bit",  # memory-efficient
+        report_to                   = "tensorboard",  # set to "wandb" if you use it
     )
 
     trainer = SFTTrainer(
-        model                   = model,
-        tokenizer               = tokenizer,
-        train_dataset           = ds["train"],
-        eval_dataset            = ds["validation"],
-        dataset_text_field      = "text",
-        max_seq_length          = MAX_SEQ_LEN,
-        args                    = training_args,
+        model              = model,
+        tokenizer          = tokenizer,
+        train_dataset      = ds["train"],
+        eval_dataset       = ds["validation"],
+        dataset_text_field = "text",
+        max_seq_length     = MAX_SEQ_LEN,
+        args               = training_args,
     )
 
     # ----------------------------- #
