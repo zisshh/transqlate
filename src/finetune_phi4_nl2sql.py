@@ -1,8 +1,9 @@
 # Fine-tune Microsoft Phi-4 Mini-Instruct (3.8 B) for NL→SQL with Unsloth QLoRA
 # Hardware target: 1× NVIDIA L4 (24 GB VRAM)
 
-import torch, os, warnings
+import torch
 from unsloth import FastLanguageModel, SFTTrainer
+from unsloth.chat_templates import get_chat_template
 from datasets import load_dataset
 from transformers import TrainingArguments
 
@@ -22,7 +23,7 @@ model, tokenizer = FastLanguageModel.from_pretrained(
     device_map           = "auto",
 )
 
-from unsloth.chat_templates import get_chat_template
+
 tokenizer = get_chat_template(tokenizer, chat_template="phi-4")
 
 # ----------------------------- #
