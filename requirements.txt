@@ -1,13 +1,14 @@
-torch==2.7.0
-transformers>=4.40.0
-datasets>=2.18.0
+# This file is used to install the required packages for the project.
+# It is recommended to use a virtual environment to avoid conflicts with other projects.
+# These versions are tested and known to work together for GCP instances with cuda 12.4 and python 3.10.
 
-# For best compatibility, get unsloth from GitHub main branch (has the latest fixes for torch 2.7/CUDA 12.4)
-git+https://github.com/unslothai/unsloth.git
+torch==2.5.0
+transformers==4.52.4
+datasets==3.6.0
+
+unsloth==2025.6.1
 
 flash-attn==2.7.4.post1
-xformers==0.0.30
-bitsandbytes>=0.42.0
-triton>=3.0.0
+xformers==0.0.28.post2
 ninja
 packaging
