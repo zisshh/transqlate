@@ -3,6 +3,7 @@
 # Transqlate CLI – powered by the fine-tuned Phi-4-mini (QLoRA) model on HF Hub
 #  ▸ Loads tokenizer and model directly from Hugging Face or a local path
 #  ▸ Output parsing keys off the first "SQL:" label (matches new dataset)
+#  ▸ Now safely prompts before running any DDL/DML, and handles all result types
 # --------------------------------------------------------------------------
 
 import sys
@@ -74,7 +75,6 @@ def _print_exception(exc: Exception):
 def _collect_db_params(db_type: str) -> Tuple[str, dict]:
     params = {}
     if db_type == "sqlite":
-        # --- Improved guidance for SQLite path ---
         while True:
             msg = (
                 "SQLite database file path\n"
@@ -82,7 +82,6 @@ def _collect_db_params(db_type: str) -> Tuple[str, dict]:
                 "[yellow]Do NOT wrap the path in quotes. If you copied it with quotes, remove them.[/yellow]"
             )
             db_path = Prompt.ask(msg, default="example.db")
-            # Remove wrapping quotes if present
             if (db_path.startswith('"') and db_path.endswith('"')) or (db_path.startswith("'") and db_path.endswith("'")):
                 console.print(
                     "[red]Please remove the wrapping quotes from your path and try again.[/red]"
@@ -90,7 +89,6 @@ def _collect_db_params(db_type: str) -> Tuple[str, dict]:
                 continue
             params["db_path"] = db_path
             break
-        # --- End guidance ---
     else:
         params["host"] = Prompt.ask("Host", default="localhost")
         default_port = {
@@ -128,6 +126,10 @@ def _choose_db_interactively() -> Tuple[str, dict]:
     return _collect_db_params(db_type)
 
 class Session:
+    DDL_DML_PATTERN = re.compile(
+        r"^\s*(DROP|CREATE|ALTER|TRUNCATE|RENAME|INSERT|UPDATE|DELETE)\b", re.IGNORECASE
+    )
+
     def __init__(
         self,
         db_type: str,
@@ -148,12 +150,33 @@ class Session:
         self.table_embs = table_embs
 
     def execute_sql(self, sql: str):
+        # -- DDL/DML confirmation prompt --
+        if self.DDL_DML_PATTERN.match(sql):
+            console.print(Panel(
+                f"[red]Caution: This statement will alter your database.[/red]\n"
+                f"[bold yellow]{sql}[/bold yellow]",
+                style="red"
+            ))
+            resp = Prompt.ask("[bold red]Are you sure you want to execute this statement?[/bold red] (y/N)", default="N")
+            if resp.strip().lower() not in ("y", "yes"):
+                console.print("[yellow]Cancelled. Statement not executed.[/yellow]")
+                return
+
         try:
             cur = self.extractor.conn.cursor()
             cur.execute(sql)
-            rows = cur.fetchall()
-            cols = [d[0] for d in cur.description]
-            self._pretty_table(rows, cols)
+            if cur.description is None:
+                affected = cur.rowcount
+                try:
+                    self.extractor.conn.commit()  # commit for DML/DDL (safely ignored for SELECT)
+                except Exception:
+                    pass
+                msg = f"[green]Statement executed.[/green] [dim]{affected if affected >= 0 else ''} row(s) affected.[/dim]"
+                console.print(msg)
+            else:
+                rows = cur.fetchall()
+                cols = [d[0] for d in cur.description]
+                self._pretty_table(rows, cols)
         except Exception as e:
             _print_exception(e)
 
@@ -345,7 +368,6 @@ def repl(session: Session, run_sql: bool):
                 )
             elif cmd == "clear":
                 console.clear()
-            # ---- NEW: Dynamic DB Change Command ----
             elif cmd == "change_db":
                 console.print(
                     Panel(
@@ -371,7 +393,6 @@ def repl(session: Session, run_sql: bool):
                 except Exception as e:
                     _print_exception(e)
                     console.print("[red]Failed to change database. Connection unchanged.[/red]")
-            # ---- END Dynamic DB Change ----
             else:
                 console.print(f"[red]Unknown command[/red]: {cmd}")
             continue
