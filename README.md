@@ -111,7 +111,7 @@ Or run a one-off query:
 transqlate -q "Which customers made purchases in March?" --db-path path/to/your.db
 ```
 
-![Transqlate CLI Demo](assets/cli_demo.gif)
+![Transqlate CLI Demo](assets/cli-demo.gif)
 
 #### **CLI Features**
 
