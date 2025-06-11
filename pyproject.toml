@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "transqlate"
+version = "0.1.0"
+description = "Natural Language to SQL CLI powered by a fine-tuned LLM."
+authors = [
+    { name="Shaurya Sethi", email="shauryaswapansethi@gmail.com" }
+]
+readme = "README.md"
+requires-python = ">=3.8"
+license = { file = "LICENSE" }
+dependencies = [
+    "transformers>=4.37.0",
+    "torch>=2.0.0",
+    "rich",
+    "rapidfuzz",
+    "sentence-transformers",
+    "psycopg2-binary",        # PostgreSQL
+    "mysql-connector-python", # MySQL
+    "pyodbc",                 # MSSQL
+    "cx_Oracle",              # Oracle
+]
+
+[project.scripts]
+transqlate = "transqlate.cli.cli:main"

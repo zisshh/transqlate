@@ -8,9 +8,9 @@ from __future__ import annotations
 import logging
 from typing import Dict, List, Tuple
 
-from schema_pipeline.formatter import format_schema, SPECIAL_TOKENS
-from schema_pipeline.graph import build_schema_graph
-from schema_pipeline.selector import build_table_embeddings, select_tables
+from transqlate.schema_pipeline.formatter import format_schema, SPECIAL_TOKENS
+from transqlate.schema_pipeline.graph import build_schema_graph
+from transqlate.schema_pipeline.selector import build_table_embeddings, select_tables
 from sentence_transformers import SentenceTransformer
 from transformers import AutoTokenizer
 

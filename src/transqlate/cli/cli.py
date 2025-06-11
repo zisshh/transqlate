@@ -9,7 +9,8 @@
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.resolve()))
+# Add the src directory to the Python path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import argparse
 import logging
@@ -33,11 +34,11 @@ except ImportError:
     pass
 
 # ─── Project imports ─────────────────────────────────────────────────────
-from schema_pipeline.extractor import get_schema_extractor
-from schema_pipeline.formatter import format_schema
-from schema_pipeline.orchestrator import SchemaRAGOrchestrator
-from schema_pipeline.selector import build_table_embeddings
-from inference import NL2SQLInference
+from transqlate.schema_pipeline.extractor import get_schema_extractor
+from transqlate.schema_pipeline.formatter import format_schema
+from transqlate.schema_pipeline.orchestrator import SchemaRAGOrchestrator
+from transqlate.schema_pipeline.selector import build_table_embeddings
+from transqlate.inference import NL2SQLInference
 
 from transformers import AutoTokenizer
 
