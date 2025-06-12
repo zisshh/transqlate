@@ -136,11 +136,13 @@ class SQLiteSchemaExtractor(BaseSchemaExtractor):
         return [r[0] for r in rows]
 
     def get_columns(self, table):
-        rows = self._safe_exec(f"PRAGMA table_info({table})")
+        tbl = table.replace('"', '""')  # simple identifier quoting
+        rows = self._safe_exec(f'PRAGMA table_info("{tbl}")')
         return [{"name": r[1], "type": r[2], "pk": bool(r[5])} for r in rows]
 
     def get_foreign_keys(self, table):
-        rows = self._safe_exec(f"PRAGMA foreign_key_list({table})")
+        tbl = table.replace('"', '""')
+        rows = self._safe_exec(f'PRAGMA foreign_key_list("{tbl}")')
         return [{"from_table": table, "from_column": r[3],
                  "to_table": r[2], "to_column": r[4]} for r in rows]
 
@@ -220,7 +222,8 @@ class MySQLSchemaExtractor(BaseSchemaExtractor):
         return [r[0] for r in rows]
 
     def get_columns(self, table):
-        rows = self._safe_exec(f"DESCRIBE `{table}`")
+        tbl = table.replace("`", "``")  # quote identifier for safety
+        rows = self._safe_exec(f"DESCRIBE `{tbl}`")
         return [{"name": r[0], "type": _bytes2str(r[1]),
                  "pk": (r[3] == "PRI")} for r in rows]
 
