@@ -221,10 +221,13 @@ def _connection_lost(exc: Exception) -> bool:
     msg = str(exc).lower()
     patterns = [
         "connection already closed",
+        "connection is closed",
         "closed unexpectedly",
+        "server closed the connection unexpectedly",
         "connection not open",
         "server closed the connection",
         "ssl connection has been closed",
+        "ssl syscall error: eof detected",
         "server has gone away",
         "lost connection",
         "not connected",
@@ -334,28 +337,42 @@ class Session:
             if _connection_lost(e):
                 console.print(
                     Panel(
-                        f"Connection lost while executing query:\n{msg}",
+                        f"Connection lost while executing query (likely due to idle timeout):\n{msg}",
                         style="red",
                     )
                 )
-                if self.reconnect():
-                    console.print("[yellow]Please retry your last command.[/yellow]")
+                interactive = sys.stdin.isatty()
+                retry_sql = False
+                reconnect_ok = False
+                if interactive:
+                    resp = Prompt.ask(
+                        "Reconnect using previous credentials? (Y/n/change)",
+                        default="Y",
+                    )
+                else:
+                    resp = "Y"
+                if resp.lower().startswith("y"):
+                    reconnect_ok = self.reconnect()
+                elif resp.lower().startswith("change"):
+                    new_db_type, new_params = _choose_db_interactively()
+                    self.db_type = new_db_type
+                    self.connection_params = new_params
+                    reconnect_ok = self.reconnect()
+                if reconnect_ok:
+                    if interactive:
+                        retry = Prompt.ask("Retry last query? (Y/n)", default="Y")
+                        retry_sql = retry.lower().startswith("y")
+                    else:
+                        retry_sql = True
                 else:
                     console.print(
-                        Panel(
-                            "Failed to automatically reconnect. You'll be asked for new credentials.",
-                            style="yellow",
-                        )
+                        "[red]Reconnection failed. Use :change_db to configure a new connection.[/red]"
                     )
-                    new_db_type, new_params = _choose_db_interactively()
+                if retry_sql and reconnect_ok:
                     try:
-                        self.db_type = new_db_type
-                        self.connection_params = new_params
-                        self.reconnect()
-                    except Exception:
-                        console.print(
-                            "[red]Reconnection failed. Please use :change_db later to try again.[/red]"
-                        )
+                        self.execute_sql(sql)
+                    except Exception as e2:
+                        _print_exception(e2)
                 return
             if "current transaction is aborted" in lower or "infailedsqltransaction" in lower:
                 console.print(
