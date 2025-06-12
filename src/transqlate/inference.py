@@ -25,7 +25,7 @@ PROMPT_TEMPLATE = (
 )  # <- identical to fine-tune dataset (PUT_QUESTION_IN_INSTRUCTION=True)
 
 _DEFAULT_GEN_KWARGS = dict(
-    max_new_tokens=512,
+    max_new_tokens=2048,
     temperature=0.1,
     top_p=0.9,
     do_sample=True,
