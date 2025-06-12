@@ -80,6 +80,9 @@ model = AutoModelForCausalLM.from_pretrained(model_id)
 The schema retrieval (RAG) pipeline is designed to provide the LLM with only the most relevant tables, columns, and relationships for each query. This ensures scalability to large databases and high accuracy by avoiding context overload.
 
 * **Schema Extractor**: Connects to SQLite, PostgreSQL, MySQL, and other databases to extract full schema graphs.
+  * Quoted identifiers are preserved: if a table or column name is wrapped in
+    quotes, the extractor keeps its exact case (Postgres lowercases unquoted
+    names, Oracle uppercases them).
 * **Formatter**: Converts extracted schema to a compact, model-friendly format.
 * **RAG Selector**: Selects and injects only the necessary schema subset for each prompt, using similarity and context rules.
 

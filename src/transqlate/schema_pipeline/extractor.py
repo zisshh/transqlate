@@ -63,7 +63,22 @@ def _bytes2str(value: Any) -> Any:
 
 
 def _normalize_identifier(dbms: str, identifier: str) -> str:
-    """Return identifier in the default case rules of each DBMS."""
+    """Return identifier respecting quoting semantics for each DBMS."""
+    if not identifier:
+        return identifier
+
+    # If the name is quoted (e.g. "MyTable", `my_col`, [MyCol]) we assume the
+    # caller wants the exact case preserved. Quotes are stripped so the value
+    # matches what the system catalogs store.
+    quote_pairs = {
+        '"': '"',
+        "`": "`",
+        "[": "]",
+    }
+    start, end = identifier[0], identifier[-1]
+    if start in quote_pairs and end == quote_pairs[start]:
+        return identifier[1:-1]
+
     if dbms == "postgresql":
         return identifier.lower()
     if dbms == "oracle":
@@ -168,7 +183,7 @@ class PostgresSchemaExtractor(BaseSchemaExtractor):
         return [r[0] for r in rows]
 
     def get_columns(self, table):
-        table_norm = _normalize_identifier(self.dbms, table)
+        table_exact = _normalize_identifier(self.dbms, table)
         q = psql.SQL("""
             SELECT c.column_name, c.data_type,
                    EXISTS (
@@ -183,11 +198,11 @@ class PostgresSchemaExtractor(BaseSchemaExtractor):
             FROM information_schema.columns c
             WHERE c.table_name = %s AND c.table_schema = %s; -- Added schema filter for c
         """)
-        rows = self._safe_exec(q, (table_norm, self.schema, table_norm, self.schema))
+        rows = self._safe_exec(q, (table_exact, self.schema, table_exact, self.schema))
         return [{"name": r[0], "type": r[1], "pk": bool(r[2])} for r in rows]
 
     def get_foreign_keys(self, table):
-        table_norm = _normalize_identifier(self.dbms, table)
+        table_exact = _normalize_identifier(self.dbms, table)
         q = psql.SQL("""
             SELECT kcu.table_name, kcu.column_name,
                    ccu.table_name, ccu.column_name
@@ -200,7 +215,7 @@ class PostgresSchemaExtractor(BaseSchemaExtractor):
               AND tc.table_name=%s
               AND tc.table_schema = %s; -- Added schema filter for tc
         """)
-        rows = self._safe_exec(q, (table_norm, self.schema))
+        rows = self._safe_exec(q, (table_exact, self.schema))
         return [{"from_table": r[0], "from_column": r[1],
                  "to_table": r[2], "to_column": r[3]} for r in rows]
 
@@ -323,7 +338,7 @@ class OracleSchemaExtractor(BaseSchemaExtractor):
         return [r[0] for r in rows]
 
     def get_columns(self, table):
-        tbl = _normalize_identifier(self.dbms, table)
+        tbl_exact = _normalize_identifier(self.dbms, table)
         q = """
             SELECT column_name, data_type,
                    CASE WHEN column_name IN (
@@ -336,11 +351,11 @@ class OracleSchemaExtractor(BaseSchemaExtractor):
             FROM user_tab_columns
             WHERE table_name=:tbl
         """
-        rows = self._safe_exec(q, {"tbl": tbl})
+        rows = self._safe_exec(q, {"tbl": tbl_exact})
         return [{"name": r[0], "type": r[1], "pk": bool(r[2])} for r in rows]
 
     def get_foreign_keys(self, table):
-        tbl = _normalize_identifier(self.dbms, table)
+        tbl_exact = _normalize_identifier(self.dbms, table)
         q = """
             SELECT a.column_name,
                    c_pk.table_name,
@@ -351,7 +366,7 @@ class OracleSchemaExtractor(BaseSchemaExtractor):
             JOIN user_constraints c_pk ON c.r_constraint_name = c_pk.constraint_name
             WHERE c.constraint_type='R' AND c.table_name=:tbl
         """
-        rows = self._safe_exec(q, {"tbl": tbl})
+        rows = self._safe_exec(q, {"tbl": tbl_exact})
         return [{"from_table": table, "from_column": r[0],
                  "to_table": r[1], "to_column": r[2]} for r in rows]
 
