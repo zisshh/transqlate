@@ -65,6 +65,19 @@ _DB_NAME_PATTERN = re.compile(
 # the --tracebacks CLI flag during debugging.
 SHOW_TRACEBACKS = False
 
+
+def _positive_int(value: str) -> int:
+    """Argparse helper to ensure a positive integer."""
+    try:
+        ivalue = int(value)
+        if ivalue <= 0:
+            raise ValueError
+        return ivalue
+    except (TypeError, ValueError):
+        raise argparse.ArgumentTypeError(
+            f"max_new_tokens must be a positive integer, got '{value}'"
+        )
+
 def extract_sql(sql_text: str, cot_text: str) -> str:
     candidate = sql_text.strip()
     is_incomplete = (
@@ -482,7 +495,7 @@ def extract_schema_token_span(prompt_text, tokenizer):
     schema_tokens = enc['input_ids'][sch_start_token_idx : sch_end_token_idx + 1]
     return schema_tokens, sch_start_token_idx, sch_end_token_idx
 
-def _run_model(session: Session, question: str) -> Tuple[str, str]:
+def _run_model(session: Session, question: str, max_new_tokens: int) -> Tuple[str, str]:
     prompt, prompt_ids, _ = session.orchestrator.build_prompt(question)
     try:
         schema_tokens, _, _ = extract_schema_token_span(prompt, session.tokenizer)
@@ -491,7 +504,9 @@ def _run_model(session: Session, question: str) -> Tuple[str, str]:
         print(f"[DEBUG] prompt: {prompt[:500]}...")
         print(f"[DEBUG] prompt_ids: {prompt_ids}")
         raise
-    cot_text, sql_text = session.inference.generate(question, schema_tokens)
+    cot_text, sql_text = session.inference.generate(
+        question, schema_tokens, max_new_tokens=max_new_tokens
+    )
     return cot_text, sql_text
 
 def _print_result(session: Session, question: str, cot_text: str, sql_text: str, run_sql: bool):
@@ -509,7 +524,7 @@ def _print_result(session: Session, question: str, cot_text: str, sql_text: str,
         if run_sql:
             session.execute_sql(best_sql)
 
-def repl(session: Session, run_sql: bool):
+def repl(session: Session, run_sql: bool, max_new_tokens: int):
     console.print(
         Panel(
             "[bold cyan]Transqlate[/bold cyan] – Natural Language → SQL",
@@ -592,7 +607,7 @@ def repl(session: Session, run_sql: bool):
             continue
         try:
             with console.status("[bold cyan]Reasoning...[/bold cyan]", spinner="dots"):
-                cot_text, sql_text = _run_model(session, line)
+                cot_text, sql_text = _run_model(session, line, max_new_tokens)
             _print_result(session, line, cot_text, sql_text, run_sql)
         except Exception as e:
             msg = str(e)
@@ -618,9 +633,9 @@ def repl(session: Session, run_sql: bool):
                         continue
             _print_exception(e)
 
-def oneshot(session: Session, question: str, execute: bool):
+def oneshot(session: Session, question: str, execute: bool, max_new_tokens: int):
     with console.status("[bold cyan]Reasoning...[/bold cyan]", spinner="dots"):
-        cot_text, sql_text = _run_model(session, question)
+        cot_text, sql_text = _run_model(session, question, max_new_tokens)
     console.print(Panel(f"[bold green]Query:[/bold green] {question}"))
     _print_result(session, question, cot_text, sql_text, execute)
 
@@ -640,6 +655,15 @@ def main():
     parser.add_argument("--password")
     parser.add_argument("--model", help="Path or HF repo for fine-tuned model directory")
     parser.add_argument(
+        "--max-new-tokens",
+        type=_positive_int,
+        default=2048,
+        help=(
+            "Maximum tokens to generate per response (default: 2048). "
+            "For very complex or verbose queries, increase this limit."
+        ),
+    )
+    parser.add_argument(
         "--tracebacks",
         action="store_true",
         help="Display Python tracebacks for errors (debugging).",
@@ -653,9 +677,14 @@ def main():
     if session is None:
         sys.exit(1)
     if args.interactive:
-        repl(session, run_sql=args.execute)
+        repl(session, run_sql=args.execute, max_new_tokens=args.max_new_tokens)
     else:
-        oneshot(session, question=args.question, execute=args.execute)
+        oneshot(
+            session,
+            question=args.question,
+            execute=args.execute,
+            max_new_tokens=args.max_new_tokens,
+        )
 
 if __name__ == "__main__":
     main()
