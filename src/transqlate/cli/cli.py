@@ -45,6 +45,22 @@ from transformers import AutoTokenizer
 console = Console()
 _SQL_SPLIT_RE = re.compile(r"\bSQL\s*:\s*", re.IGNORECASE)
 
+# Map supported DB types to display names used in the CLI
+_DB_DISPLAY_NAMES = {
+    "sqlite": "SQLite",
+    "postgres": "PostgreSQL",
+    "postgresql": "PostgreSQL",
+    "mysql": "MySQL",
+    "mssql": "MSSQL",
+    "sqlserver": "MSSQL",
+    "oracle": "Oracle",
+}
+
+_DB_NAME_PATTERN = re.compile(
+    r"\b(sqlite|postgresql|postgres|mysql|mssql|sqlserver|oracle)\b",
+    re.IGNORECASE,
+)
+
 # Toggle for showing Python tracebacks with errors. Can be enabled via
 # the --tracebacks CLI flag during debugging.
 SHOW_TRACEBACKS = False
@@ -78,6 +94,16 @@ def _print_exception(exc: Exception):
     console.print(Panel.fit(f"[bold red]Error:[/bold red] {exc}", style="red"))
     if SHOW_TRACEBACKS:
         traceback.print_exc()
+
+
+def _fix_cot_dbms(cot_text: str, db_type: str) -> str:
+    """Replace any DBMS names in `cot_text` with the current database type."""
+    desired = _DB_DISPLAY_NAMES.get(db_type.lower(), db_type.capitalize())
+
+    def repl(match: re.Match) -> str:
+        return desired
+
+    return _DB_NAME_PATTERN.sub(repl, cot_text)
 
 def _collect_db_params(db_type: str) -> Tuple[str, dict]:
     params = {}
@@ -351,7 +377,11 @@ def _run_model(session: Session, question: str) -> Tuple[str, str]:
 
 def _print_result(session: Session, question: str, cot_text: str, sql_text: str, run_sql: bool):
     console.print("\n[dim]Chain of Thought:[/dim]")
-    console.print(cot_text or "[italic dim]Model produced no CoT[/italic dim]")
+    if cot_text:
+        cleaned_cot = _fix_cot_dbms(cot_text, session.db_type)
+    else:
+        cleaned_cot = "[italic dim]Model produced no CoT[/italic dim]"
+    console.print(cleaned_cot)
     best_sql = extract_sql(sql_text, cot_text)
     if best_sql:
         console.print("\n[bold cyan]SQL:[/bold cyan]")
