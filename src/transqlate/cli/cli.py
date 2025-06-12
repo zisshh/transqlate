@@ -45,6 +45,10 @@ from transformers import AutoTokenizer
 console = Console()
 _SQL_SPLIT_RE = re.compile(r"\bSQL\s*:\s*", re.IGNORECASE)
 
+# Toggle for showing Python tracebacks with errors. Can be enabled via
+# the --tracebacks CLI flag during debugging.
+SHOW_TRACEBACKS = False
+
 def extract_sql(sql_text: str, cot_text: str) -> str:
     candidate = sql_text.strip()
     is_incomplete = (
@@ -70,8 +74,10 @@ def extract_sql(sql_text: str, cot_text: str) -> str:
     return candidate.strip()
 
 def _print_exception(exc: Exception):
+    """Display a brief error message and, optionally, the traceback."""
     console.print(Panel.fit(f"[bold red]Error:[/bold red] {exc}", style="red"))
-    traceback.print_exc()
+    if SHOW_TRACEBACKS:
+        traceback.print_exc()
 
 def _collect_db_params(db_type: str) -> Tuple[str, dict]:
     params = {}
@@ -179,7 +185,28 @@ class Session:
                 cols = [d[0] for d in cur.description]
                 self._pretty_table(rows, cols)
         except Exception as e:
-            _print_exception(e)
+            try:
+                self.extractor.conn.rollback()
+            except Exception:
+                pass
+            msg = str(e)
+            lower = msg.lower()
+            if "current transaction is aborted" in lower or "infailedsqltransaction" in lower:
+                console.print(
+                    Panel(
+                        "A previous query failed and the transaction was aborted. The connection has been reset. Please retry your query.",
+                        style="red",
+                    )
+                )
+            elif re.search(r"no such table|does not exist|undefined table", lower):
+                console.print(
+                    Panel(
+                        f"{msg}\n[dim]Use :show schema to view available tables.[/dim]",
+                        style="yellow",
+                    )
+                )
+            else:
+                console.print(Panel(f"Error executing query:\n{msg}", style="red"))
 
     def _pretty_table(self, rows, cols):
         if not rows:
@@ -209,30 +236,46 @@ class Session:
         ]
 
 def _build_session(args) -> Optional[Session]:
-    if args.db_type:
-        db_type = args.db_type.lower()
-        params = {
-            k: v
-            for k, v in {
-                "db_path": args.db_path,
-                "host": args.host,
-                "port": args.port,
-                "dbname": args.database,
-                "database": args.database,
-                "user": args.user,
-                "password": args.password,
-            }.items()
-            if v is not None
-        }
-    else:
-        db_type, params = _choose_db_interactively()
-    try:
-        extractor = get_schema_extractor(db_type, **params)
-        schema_dict = extractor.extract_schema()
-        console.print(f"[green]✓ Connected to {db_type} database.[/green]")
-    except Exception as e:
-        _print_exception(e)
-        return None
+    interactive_ok = sys.stdin.isatty()
+    attempts = 0
+    while True:
+        if args.db_type and attempts == 0:
+            db_type = args.db_type.lower()
+            params = {
+                k: v
+                for k, v in {
+                    "db_path": args.db_path,
+                    "host": args.host,
+                    "port": args.port,
+                    "dbname": args.database,
+                    "database": args.database,
+                    "user": args.user,
+                    "password": args.password,
+                }.items()
+                if v is not None
+            }
+        else:
+            db_type, params = _choose_db_interactively()
+        try:
+            extractor = get_schema_extractor(db_type, **params)
+            schema_dict = extractor.extract_schema()
+            console.print(f"[green]✓ Connected to {db_type} database.[/green]")
+            break
+        except Exception as e:
+            console.print(
+                Panel(
+                    f"Could not connect: {e}\n[dim]Check your host, port, username, password, or database name.[/dim]",
+                    style="red",
+                )
+            )
+            if not interactive_ok:
+                return None
+            retry = Prompt.ask("Retry connection? (y/N)", default="N")
+            if retry.strip().lower() not in {"y", "yes"}:
+                return None
+            args.db_type = None
+            attempts += 1
+            continue
     model_id = args.model or "Shaurya-Sethi/transqlate-phi4"
     model_id = model_id.replace("\\", "/")
     if model_id == "Shaurya-Sethi/transqlate-phi4":
@@ -446,7 +489,14 @@ def main():
     parser.add_argument("--user")
     parser.add_argument("--password")
     parser.add_argument("--model", help="Path or HF repo for fine-tuned model directory")
+    parser.add_argument(
+        "--tracebacks",
+        action="store_true",
+        help="Display Python tracebacks for errors (debugging).",
+    )
     args = parser.parse_args()
+    global SHOW_TRACEBACKS
+    SHOW_TRACEBACKS = args.tracebacks
     if not args.interactive and not args.question:
         parser.error("Provide --interactive or --question/-q.")
     session = _build_session(args)
