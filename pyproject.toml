@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "transqlate"
-version = "0.1.0"
+version = "0.1.1"
 description = "Natural Language to SQL CLI powered by a fine-tuned LLM."
 authors = [
     { name="Shaurya Sethi", email="shauryaswapansethi@gmail.com" }
 ]
-readme = "README.md"
+readme = "pypi-description.md"
 requires-python = ">=3.8"
 license = { file = "LICENSE" }
 dependencies = [

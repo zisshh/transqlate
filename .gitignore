@@ -3,3 +3,4 @@ dataset/
 __pycache__/
 **/__pycache__/
 transqlate.egg-info/
+pypi-description.md
