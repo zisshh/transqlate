@@ -158,6 +158,60 @@ def _choose_db_interactively() -> Tuple[str, dict]:
     )
     return _collect_db_params(db_type)
 
+# ---------------------------------------------------------------------------
+# Utility helpers
+# ---------------------------------------------------------------------------
+
+def _looks_incomplete(sql: str) -> bool:
+    """Heuristically determine if an SQL statement appears incomplete."""
+    if not sql or not sql.strip():
+        return True
+    sql = sql.strip()
+    if sql.count("(") > sql.count(")"):
+        return True
+    if sql.count("'") % 2 == 1 or sql.count('"') % 2 == 1:
+        return True
+    tail = re.sub(r";\s*$", "", sql).rstrip().upper()
+    incomplete_tokens = {
+        "SELECT",
+        "FROM",
+        "WHERE",
+        "JOIN",
+        "ON",
+        "AND",
+        "OR",
+        "GROUP",
+        "ORDER",
+        "VALUES",
+        "SET",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+    }
+    if tail.endswith(tuple(incomplete_tokens)):
+        return True
+    if tail.endswith(','):
+        return True
+    return False
+
+def _connection_lost(exc: Exception) -> bool:
+    """Return True if `exc` appears related to a lost or closed connection."""
+    msg = str(exc).lower()
+    patterns = [
+        "connection already closed",
+        "closed unexpectedly",
+        "connection not open",
+        "server closed the connection",
+        "ssl connection has been closed",
+        "server has gone away",
+        "lost connection",
+        "not connected",
+        "broken pipe",
+        "pipe closed",
+        "cannot operate on a closed database",
+    ]
+    return any(p in msg for p in patterns)
+
 class Session:
     DDL_DML_PATTERN = re.compile(
         r"^\s*(DROP|CREATE|ALTER|TRUNCATE|RENAME|INSERT|UPDATE|DELETE)\b", re.IGNORECASE
@@ -172,6 +226,7 @@ class Session:
         orchestrator: SchemaRAGOrchestrator,
         inference: NL2SQLInference,
         table_embs=None,
+        connection_params: Optional[dict] = None,
     ):
         self.db_type = db_type
         self.extractor = extractor
@@ -181,8 +236,45 @@ class Session:
         self.inference = inference
         self.history: List[Tuple[str, str]] = []
         self.table_embs = table_embs
+        self.connection_params = connection_params or {}
+
+    # ------------------------------------------------------------------
+    # Connection handling
+    # ------------------------------------------------------------------
+
+    def reconnect(self) -> bool:
+        """Attempt to re-establish the DB connection using stored params."""
+        if not self.connection_params:
+            return False
+        try:
+            new_extractor = get_schema_extractor(self.db_type, **self.connection_params)
+            new_schema_dict = new_extractor.extract_schema()
+            new_orch = SchemaRAGOrchestrator(self.tokenizer, new_schema_dict)
+            new_table_embs = build_table_embeddings(new_schema_dict, new_orch._embed)
+            # Close old extractor if possible
+            try:
+                self.extractor.close()
+            except Exception:
+                pass
+            self.extractor = new_extractor
+            self.schema_dict = new_schema_dict
+            self.orchestrator = new_orch
+            self.table_embs = new_table_embs
+            console.print("[green]✓ Reconnected to database.[/green]")
+            return True
+        except Exception as exc:
+            _print_exception(exc)
+            return False
 
     def execute_sql(self, sql: str):
+        if _looks_incomplete(sql):
+            console.print(
+                Panel(
+                    f"[red]Query appears incomplete and was not executed.[/red]\n[bold yellow]{sql}[/bold yellow]\n[dim]Edit your question or fix the SQL and try again.[/dim]",
+                    style="red",
+                )
+            )
+            return
         # -- DDL/DML confirmation prompt --
         if self.DDL_DML_PATTERN.match(sql):
             console.print(Panel(
@@ -217,6 +309,32 @@ class Session:
                 pass
             msg = str(e)
             lower = msg.lower()
+            if _connection_lost(e):
+                console.print(
+                    Panel(
+                        f"Connection lost while executing query:\n{msg}",
+                        style="red",
+                    )
+                )
+                if self.reconnect():
+                    console.print("[yellow]Please retry your last command.[/yellow]")
+                else:
+                    console.print(
+                        Panel(
+                            "Failed to automatically reconnect. You'll be asked for new credentials.",
+                            style="yellow",
+                        )
+                    )
+                    new_db_type, new_params = _choose_db_interactively()
+                    try:
+                        self.db_type = new_db_type
+                        self.connection_params = new_params
+                        self.reconnect()
+                    except Exception:
+                        console.print(
+                            "[red]Reconnection failed. Please use :change_db later to try again.[/red]"
+                        )
+                return
             if "current transaction is aborted" in lower or "infailedsqltransaction" in lower:
                 console.print(
                     Panel(
@@ -324,6 +442,7 @@ def _build_session(args) -> Optional[Session]:
         orchestrator,
         inference,
         table_embs,
+        connection_params=params,
     )
 
 def find_sublist_indices(lst, sublst):
@@ -462,6 +581,7 @@ def repl(session: Session, run_sql: bool):
                     session.schema_dict = new_schema_dict
                     session.orchestrator = new_orchestrator
                     session.table_embs = new_table_embs
+                    session.connection_params = new_params
                     session.history = []
                     console.print(f"[green]✓ Switched to new {new_db_type} database.[/green]")
                 except Exception as e:
