@@ -236,9 +236,14 @@ class MySQLSchemaExtractor(BaseSchemaExtractor):
         rows = self._safe_exec("SHOW TABLES")
         return [r[0] for r in rows]
 
+    @staticmethod
+    def _quote_identifier(identifier: str) -> str:
+        """Return a backtick quoted identifier safe for MySQL."""
+        return f"`{identifier.replace('`', '``')}`"
+
     def get_columns(self, table):
-        tbl = table.replace("`", "``")  # quote identifier for safety
-        rows = self._safe_exec(f"DESCRIBE `{tbl}`")
+        quoted_tbl = self._quote_identifier(table)
+        rows = self._safe_exec(f"DESCRIBE {quoted_tbl}")
         return [{"name": r[0], "type": _bytes2str(r[1]),
                  "pk": (r[3] == "PRI")} for r in rows]
 
