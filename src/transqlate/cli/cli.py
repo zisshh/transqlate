@@ -19,6 +19,11 @@ import traceback
 from getpass import getpass
 from typing import List, Optional, Tuple
 
+try:
+    from pwinput import pwinput  # type: ignore
+except Exception:  # pragma: no cover - dependency may be missing
+    pwinput = None
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -150,7 +155,11 @@ def _collect_db_params(db_type: str) -> Tuple[str, dict]:
         else:
             params["database"] = Prompt.ask("Database name")
         params["user"] = Prompt.ask("Username")
-        params["password"] = getpass("Password: ")
+        console.print("[dim](Your password will not be shown as you type.)[/dim]")
+        if pwinput:
+            params["password"] = pwinput(prompt="Password: ", mask="*")
+        else:
+            params["password"] = getpass("Password: ")
         if db_type == "oracle":
             params["service_name"] = params.pop("database")
     return db_type, params

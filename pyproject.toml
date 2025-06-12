@@ -22,6 +22,7 @@ dependencies = [
     "mysql-connector-python", # MySQL
     "pyodbc",                 # MSSQL
     "cx_Oracle",              # Oracle
+    "pwinput",
 ]
 
 [project.scripts]
