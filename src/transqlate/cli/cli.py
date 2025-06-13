@@ -150,7 +150,10 @@ def _fix_cot_dbms(cot_text: str, db_type: str) -> str:
     return _DB_NAME_PATTERN.sub(repl, cot_text)
 
 
-_LIMIT_RE = re.compile(r"\bLIMIT\s+(\d+)\b", re.IGNORECASE)
+# matches a trailing LIMIT clause e.g. "LIMIT 10" possibly followed by a
+# semicolon or whitespace at the end of the query
+# capture an optional trailing semicolon so we can preserve it
+_LIMIT_RE = re.compile(r"\bLIMIT\s+(\d+)\s*(;?)\s*$", re.IGNORECASE)
 
 
 def _post_process_mssql_sql(sql: str) -> str:
@@ -174,9 +177,10 @@ def _post_process_mssql_sql(sql: str) -> str:
     'SELECT * FROM t WHERE done=1;'
     """
 
-    out = sql
+    out = sql.strip()
 
-    # IDENTIFIERS
+    # IDENTIFIERS - convert `foo` or "foo" to [foo]
+    out = re.sub(r'`([^`]+)`', r'[\1]', out)
     out = re.sub(r'"([A-Za-z0-9_]+)"', r'[\1]', out)
 
     # BOOLEAN LITERALS
@@ -185,18 +189,24 @@ def _post_process_mssql_sql(sql: str) -> str:
 
     # DATA TYPES
     out = re.sub(r"\bDATETIME\b", "DATETIME2", out, flags=re.IGNORECASE)
+    out = re.sub(r"\bTIMESTAMP\b", "DATETIME2", out, flags=re.IGNORECASE)
     out = re.sub(r"\bINTEGER\s+PRIMARY\s+KEY\b", "INT PRIMARY KEY", out, flags=re.IGNORECASE)
     out = re.sub(r"\bAUTOINCREMENT\b", "IDENTITY(1,1)", out, flags=re.IGNORECASE)
 
     # LIMIT -> TOP
     m = _LIMIT_RE.search(out)
-    if m and "TOP" not in out.upper():
+    if m:
         n = m.group(1)
+        semi = m.group(2)
         out = _LIMIT_RE.sub("", out)
-        if re.search(r"(?i)SELECT\s+DISTINCT", out):
-            out = re.sub(r"(?i)SELECT\s+DISTINCT", f"SELECT DISTINCT TOP {n}", out, count=1)
-        else:
-            out = re.sub(r"(?i)SELECT", f"SELECT TOP {n}", out, count=1)
+        if not re.search(r"(?i)\bTOP\s+\d+", out):
+            if re.search(r"(?i)SELECT\s+DISTINCT", out):
+                out = re.sub(r"(?i)SELECT\s+DISTINCT", f"SELECT DISTINCT TOP {n}", out, count=1)
+            else:
+                out = re.sub(r"(?i)SELECT", f"SELECT TOP {n}", out, count=1)
+        out = out.rstrip()
+        if semi:
+            out += ";"
 
     # Cleanup stray spaces before semicolons
     out = re.sub(r"\s+;", ";", out)
