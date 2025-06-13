@@ -49,6 +49,7 @@ from transqlate.embedding_utils import (
     EmbeddingDownloadError,
     load_sentence_embedder,
 )
+from transqlate import sql_transform
 
 from transformers import AutoTokenizer
 
@@ -149,68 +150,11 @@ def _fix_cot_dbms(cot_text: str, db_type: str) -> str:
     return _DB_NAME_PATTERN.sub(repl, cot_text)
 
 
-# matches a trailing LIMIT clause e.g. "LIMIT 10" possibly followed by a
-# semicolon or whitespace at the end of the query
-# capture an optional trailing semicolon so we can preserve it
-_LIMIT_RE = re.compile(r"\bLIMIT\s+(\d+)\s*(;?)\s*$", re.IGNORECASE)
 
 
 def _post_process_mssql_sql(sql: str) -> str:
-    """Transform common SQLite/MySQL syntax to T–SQL.
-
-    Parameters
-    ----------
-    sql : str
-        Input SQL string potentially using other dialect syntax.
-
-    Returns
-    -------
-    str
-        SQL string adjusted for MSSQL.
-
-    Examples
-    --------
-    >>> _post_process_mssql_sql('SELECT "name" FROM users LIMIT 5;')
-    'SELECT TOP 5 [name] FROM users;'
-    >>> _post_process_mssql_sql('SELECT * FROM t WHERE done=TRUE;')
-    'SELECT * FROM t WHERE done=1;'
-    """
-
-    out = sql.strip()
-
-    # IDENTIFIERS - convert `foo` or "foo" to [foo]
-    out = re.sub(r'`([^`]+)`', r'[\1]', out)
-    out = re.sub(r'"([A-Za-z0-9_]+)"', r'[\1]', out)
-
-    # BOOLEAN LITERALS
-    out = re.sub(r"\bTRUE\b", "1", out, flags=re.IGNORECASE)
-    out = re.sub(r"\bFALSE\b", "0", out, flags=re.IGNORECASE)
-
-    # DATA TYPES
-    out = re.sub(r"\bDATETIME\b", "DATETIME2", out, flags=re.IGNORECASE)
-    out = re.sub(r"\bTIMESTAMP\b", "DATETIME2", out, flags=re.IGNORECASE)
-    out = re.sub(r"\bINTEGER\s+PRIMARY\s+KEY\b", "INT PRIMARY KEY", out, flags=re.IGNORECASE)
-    out = re.sub(r"\bAUTOINCREMENT\b", "IDENTITY(1,1)", out, flags=re.IGNORECASE)
-
-    # LIMIT -> TOP
-    m = _LIMIT_RE.search(out)
-    if m:
-        n = m.group(1)
-        semi = m.group(2)
-        out = _LIMIT_RE.sub("", out)
-        if not re.search(r"(?i)\bTOP\s+\d+", out):
-            if re.search(r"(?i)SELECT\s+DISTINCT", out):
-                out = re.sub(r"(?i)SELECT\s+DISTINCT", f"SELECT DISTINCT TOP {n}", out, count=1)
-            else:
-                out = re.sub(r"(?i)SELECT", f"SELECT TOP {n}", out, count=1)
-        out = out.rstrip()
-        if semi:
-            out += ";"
-
-    # Cleanup stray spaces before semicolons
-    out = re.sub(r"\s+;", ";", out)
-
-    return out.strip()
+    """Compatibility wrapper for older tests."""
+    return sql_transform.transform("mssql", sql)
 
 
 def _print_troubleshooting(db_type: str) -> None:
@@ -457,8 +401,7 @@ class Session:
                 )
             )
             return False
-        if self.db_type.lower() in {"mssql", "sqlserver"}:
-            sql = _post_process_mssql_sql(sql)
+        sql = sql_transform.transform(self.db_type, sql)
         # -- DDL/DML confirmation prompt --
         if self.DDL_DML_PATTERN.match(sql):
             console.print(Panel(
@@ -730,21 +673,17 @@ def _print_result(session: Session, question: str, cot_text: str, sql_text: str,
     console.print(cleaned_cot)
     best_sql = extract_sql(sql_text, cot_text)
     if best_sql:
-        final_sql = best_sql
-        if session.db_type.lower() in {"mssql", "sqlserver"}:
-            adjusted = _post_process_mssql_sql(best_sql)
-            if adjusted != best_sql:
-                console.print("\n[bold cyan]SQL (model):[/bold cyan]")
-                console.print(best_sql, style="bold cyan")
-                console.print(
-                    "[green]\n\N{anticlockwise open circle arrow} Adapted from SQLite \u2192 T-SQL for SQL Server.[/green]"
-                )
-                console.print("[bold cyan]SQL (T-SQL):[/bold cyan]")
-                console.print(adjusted, style="cyan")
-            else:
-                console.print("\n[bold cyan]SQL:[/bold cyan]")
-                console.print(adjusted, style="bold cyan")
-            final_sql = adjusted
+        adjusted = sql_transform.transform(session.db_type, best_sql)
+        final_sql = adjusted
+        if adjusted != best_sql:
+            console.print("\n[bold cyan]SQL (model):[/bold cyan]")
+            console.print(best_sql, style="bold cyan")
+            target = _DB_DISPLAY_NAMES.get(session.db_type.lower(), session.db_type)
+            console.print(
+                f"[green]\n\N{anticlockwise open circle arrow} Adapted from SQLite \u2192 {target}.[/green]"
+            )
+            console.print(f"[bold cyan]SQL ({target}):[/bold cyan]")
+            console.print(adjusted, style="cyan")
         else:
             console.print("\n[bold cyan]SQL:[/bold cyan]")
             console.print(best_sql, style="bold cyan")
