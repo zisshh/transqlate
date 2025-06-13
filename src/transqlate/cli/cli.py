@@ -137,6 +137,60 @@ def _fix_cot_dbms(cot_text: str, db_type: str) -> str:
     return _DB_NAME_PATTERN.sub(repl, cot_text)
 
 
+_LIMIT_RE = re.compile(r"\bLIMIT\s+(\d+)\b", re.IGNORECASE)
+
+
+def _post_process_mssql_sql(sql: str) -> str:
+    """Transform common SQLite/MySQL syntax to T–SQL.
+
+    Parameters
+    ----------
+    sql : str
+        Input SQL string potentially using other dialect syntax.
+
+    Returns
+    -------
+    str
+        SQL string adjusted for MSSQL.
+
+    Examples
+    --------
+    >>> _post_process_mssql_sql('SELECT "name" FROM users LIMIT 5;')
+    'SELECT TOP 5 [name] FROM users;'
+    >>> _post_process_mssql_sql('SELECT * FROM t WHERE done=TRUE;')
+    'SELECT * FROM t WHERE done=1;'
+    """
+
+    out = sql
+
+    # IDENTIFIERS
+    out = re.sub(r'"([A-Za-z0-9_]+)"', r'[\1]', out)
+
+    # BOOLEAN LITERALS
+    out = re.sub(r"\bTRUE\b", "1", out, flags=re.IGNORECASE)
+    out = re.sub(r"\bFALSE\b", "0", out, flags=re.IGNORECASE)
+
+    # DATA TYPES
+    out = re.sub(r"\bDATETIME\b", "DATETIME2", out, flags=re.IGNORECASE)
+    out = re.sub(r"\bINTEGER\s+PRIMARY\s+KEY\b", "INT PRIMARY KEY", out, flags=re.IGNORECASE)
+    out = re.sub(r"\bAUTOINCREMENT\b", "IDENTITY(1,1)", out, flags=re.IGNORECASE)
+
+    # LIMIT -> TOP
+    m = _LIMIT_RE.search(out)
+    if m and "TOP" not in out.upper():
+        n = m.group(1)
+        out = _LIMIT_RE.sub("", out)
+        if re.search(r"(?i)SELECT\s+DISTINCT", out):
+            out = re.sub(r"(?i)SELECT\s+DISTINCT", f"SELECT DISTINCT TOP {n}", out, count=1)
+        else:
+            out = re.sub(r"(?i)SELECT", f"SELECT TOP {n}", out, count=1)
+
+    # Cleanup stray spaces before semicolons
+    out = re.sub(r"\s+;", ";", out)
+
+    return out.strip()
+
+
 def _print_troubleshooting(db_type: str) -> None:
     """Display troubleshooting steps for the given DB type."""
     text = _DB_TROUBLESHOOT.get(db_type.lower())
@@ -372,6 +426,8 @@ class Session:
                 )
             )
             return
+        if self.db_type.lower() == "mssql":
+            sql = _post_process_mssql_sql(sql)
         # -- DDL/DML confirmation prompt --
         if self.DDL_DML_PATTERN.match(sql):
             console.print(Panel(
