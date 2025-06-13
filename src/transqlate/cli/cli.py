@@ -318,7 +318,7 @@ def _choose_db_interactively() -> Tuple[str, dict]:
         Panel(
             "[bold cyan]Let's connect to your database![/bold cyan]\n"
             "You'll be asked for connection details based on your database type.\n"
-            "[green]Tip:[/green] For SQLite, you just need the path to your .db file.",
+            "[green]Tip:[/green] For SQLite, you just need the path to your .sqlite file.",
             style="cyan",
         )
     )
