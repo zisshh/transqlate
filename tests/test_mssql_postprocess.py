@@ -56,3 +56,21 @@ def test_boolean_literals():
     sql = 'SELECT * FROM t WHERE active=TRUE AND deleted=FALSE;'
     expected = 'SELECT * FROM t WHERE active=1 AND deleted=0;'
     assert _post_process(sql) == expected
+
+
+def test_autoincrement_and_datatypes():
+    sql = 'CREATE TABLE t (`id` INTEGER PRIMARY KEY AUTOINCREMENT, created TIMESTAMP);'
+    expected = 'CREATE TABLE t ([id] INT PRIMARY KEY IDENTITY(1,1), created DATETIME2);'
+    assert _post_process(sql) == expected
+
+
+def test_existing_top_preserved():
+    sql = 'SELECT TOP 5 name FROM users LIMIT 10;'
+    expected = 'SELECT TOP 5 name FROM users;'
+    assert _post_process(sql) == expected
+
+
+def test_backticks_and_no_semicolon():
+    sql = 'SELECT `Name` FROM "Users" LIMIT 1'
+    expected = 'SELECT TOP 1 [Name] FROM [Users]'
+    assert _post_process(sql) == expected
