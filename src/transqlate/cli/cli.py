@@ -686,6 +686,34 @@ def _print_result(session: Session, question: str, cot_text: str, sql_text: str,
         if run_sql:
             session.execute_sql(best_sql)
 
+
+def _prompt_edit_sql(original_sql: str) -> Optional[str]:
+    """Prompt user to edit or replace the provided SQL string.
+
+    Returns the edited SQL, or ``None`` if editing was cancelled.
+    """
+    console.print(Panel(original_sql, title="Current SQL", style="cyan"))
+    console.print(
+        "[dim]Enter new SQL. Submit empty line to cancel or type 'CANCEL' on a new line.[/dim]"
+    )
+    lines: List[str] = []
+    while True:
+        try:
+            new_line = input()
+        except EOFError:
+            break
+        if not lines and new_line.strip() == "":
+            return None
+        if new_line.strip().upper() == "CANCEL":
+            return None
+        if new_line == "":
+            break
+        lines.append(new_line)
+    edited = "\n".join(lines).strip()
+    if not edited:
+        return None
+    return edited
+
 def repl(session: Session, run_sql: bool, max_new_tokens: int):
     console.print(
         Panel(
@@ -713,9 +741,11 @@ def repl(session: Session, run_sql: bool, max_new_tokens: int):
                     ":history – show past queries\n"
                     ":show schema – print formatted schema\n"
                     ":run – re-run last SQL against DB\n"
+                    ":edit – edit last SQL before running\n"
                     ":examples – sample NL prompts\n"
                     ":clear – clear screen\n"
                     ":change_db – switch to a new database connection\n"
+                    ":about – about this tool\n"
                     ":exit – quit",
                     style="cyan",
                 )
@@ -729,6 +759,17 @@ def repl(session: Session, run_sql: bool, max_new_tokens: int):
                     console.print("[yellow]No previous query to run.[/yellow]")
                 else:
                     session.execute_sql(session.history[-1][1])
+            elif cmd == "edit":
+                if not session.history:
+                    console.print("[yellow]No SQL query to edit.[/yellow]")
+                else:
+                    edited = _prompt_edit_sql(session.history[-1][1])
+                    if edited is None:
+                        console.print("[yellow]Edit cancelled. SQL unchanged.[/yellow]")
+                    else:
+                        question = session.history[-1][0]
+                        session.history.append((question + " [edited]", edited))
+                        console.print("[green]SQL updated. Use :run to execute.[/green]")
             elif cmd == "examples":
                 console.print(
                     "- Show me total sales by month in 2023\n"
@@ -764,6 +805,15 @@ def repl(session: Session, run_sql: bool, max_new_tokens: int):
                 except Exception as e:
                     _print_exception(e)
                     console.print("[red]Failed to change database. Connection unchanged.[/red]")
+            elif cmd == "about":
+                console.print(
+                    Panel(
+                        "Transqlate CLI allows natural language to SQL translation."\
+                        "\nDetailed documentation coming soon.",
+                        title="About",
+                        style="cyan",
+                    )
+                )
             else:
                 console.print(f"[red]Unknown command[/red]: {cmd}")
             continue
