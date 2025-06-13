@@ -132,7 +132,28 @@ transqlate -q "Which customers made purchases in March?" --db-path path/to/your.
 * Safe execution with confirmation for data-altering queries
 * Dynamic schema exploration (`:show schema`)
 * Automatic SQL dialect fixes for Postgres, MySQL, SQL Server and Oracle
+* Automatic schema qualification for SQL Server, Oracle and PostgreSQL when tables live outside their default schemas
 * Command history, example prompts, and connection switching
+
+#### Schema Qualification Examples
+
+```
+-- Before (fails on SQL Server)
+SELECT TOP 5 Product FROM Products;
+
+-- After (works)
+SELECT TOP 5 Product FROM Sales.Products;
+
+-- PostgreSQL example
+SELECT * FROM users JOIN orders ON users.id=orders.user_id;
+-- becomes
+SELECT * FROM auth.users JOIN sales.orders ON users.id=orders.user_id;
+
+-- Oracle example
+SELECT * FROM Employees;  -- employees in HR schema
+-- becomes
+SELECT * FROM HR.Employees;
+```
 
 ---
 

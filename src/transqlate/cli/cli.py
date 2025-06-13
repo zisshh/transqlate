@@ -17,7 +17,7 @@ import logging
 import re
 import traceback
 from getpass import getpass
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict
 from dataclasses import dataclass
 
 try:
@@ -152,9 +152,20 @@ def _fix_cot_dbms(cot_text: str, db_type: str) -> str:
 
 
 
-def _post_process_mssql_sql(sql: str) -> str:
-    """Compatibility wrapper for older tests."""
-    return sql_transform.transform("mssql", sql)
+def _post_process_sql(sql: str, db_type: str, table_schemas: Optional[Dict[str, str]] = None, default_schema: Optional[str] = None) -> str:
+    """Apply dialect fixes and schema qualification."""
+    out = sql_transform.transform(db_type, sql)
+    if not table_schemas:
+        return out
+    engine = db_type.lower()
+    if engine in ("mssql", "sqlserver"):
+        return sql_transform.schema_qualify_mssql(out, table_schemas)
+    if engine in ("postgres", "postgresql"):
+        return sql_transform.schema_qualify_postgres(out, table_schemas)
+    if engine == "oracle":
+        ds = default_schema or ""
+        return sql_transform.schema_qualify_oracle(out, table_schemas, ds)
+    return out
 
 
 def _print_troubleshooting(db_type: str) -> None:
@@ -354,6 +365,18 @@ class Session:
         self.history: List[HistoryEntry] = []
         self.table_embs = table_embs
         self.connection_params = connection_params or {}
+        engine = db_type.lower()
+        if engine in ("mssql", "sqlserver"):
+            default_schema = "dbo"
+        elif engine in ("postgres", "postgresql"):
+            default_schema = "public"
+        elif engine == "oracle":
+            default_schema = getattr(extractor, "default_schema", "") or getattr(extractor, "user", "")
+        else:
+            default_schema = None
+        self.table_schemas = {
+            t["name"]: t.get("schema", default_schema) for t in schema_dict.get("tables", [])
+        }
 
     def add_history(self, question: str, sql: str, edited: bool = False) -> HistoryEntry:
         entry = HistoryEntry(question=question, sql=sql, edited=edited)
@@ -386,6 +409,19 @@ class Session:
             self.schema_dict = new_schema_dict
             self.orchestrator = new_orch
             self.table_embs = new_table_embs
+            engine = self.db_type.lower()
+            if engine in ("mssql", "sqlserver"):
+                default_schema = "dbo"
+            elif engine in ("postgres", "postgresql"):
+                default_schema = "public"
+            elif engine == "oracle":
+                default_schema = getattr(new_extractor, "default_schema", "") or getattr(new_extractor, "user", "")
+            else:
+                default_schema = None
+            self.table_schemas = {
+                t["name"]: t.get("schema", default_schema)
+                for t in new_schema_dict.get("tables", [])
+            }
             console.print("[green]✓ Reconnected to database.[/green]")
             return True
         except Exception as exc:
@@ -402,6 +438,8 @@ class Session:
             )
             return False
         sql = sql_transform.transform(self.db_type, sql)
+        if self.db_type.lower() in ("mssql", "sqlserver", "postgres", "postgresql", "oracle"):
+            sql = self._qualify_tables(sql)
         # -- DDL/DML confirmation prompt --
         if self.DDL_DML_PATTERN.match(sql):
             console.print(Panel(
@@ -494,6 +532,18 @@ class Session:
             else:
                 console.print(Panel(f"Error executing query:\n{msg}", style="red"))
             return False
+
+    def _qualify_tables(self, sql: str) -> str:
+        """Prefix table names with their schema when known."""
+        engine = self.db_type.lower()
+        if engine in ("mssql", "sqlserver"):
+            return sql_transform.schema_qualify_mssql(sql, self.table_schemas)
+        if engine in ("postgres", "postgresql"):
+            return sql_transform.schema_qualify_postgres(sql, self.table_schemas)
+        if engine == "oracle":
+            default_schema = getattr(self.extractor, "default_schema", "") or getattr(self.extractor, "user", "")
+            return sql_transform.schema_qualify_oracle(sql, self.table_schemas, default_schema)
+        return sql
 
     def _pretty_table(self, rows, cols):
         if not rows:
@@ -674,6 +724,8 @@ def _print_result(session: Session, question: str, cot_text: str, sql_text: str,
     best_sql = extract_sql(sql_text, cot_text)
     if best_sql:
         adjusted = sql_transform.transform(session.db_type, best_sql)
+        if session.db_type.lower() in ("mssql", "sqlserver", "postgres", "postgresql", "oracle"):
+            adjusted = session._qualify_tables(adjusted)
         final_sql = adjusted
         if adjusted != best_sql:
             console.print("\n[bold cyan]SQL (model):[/bold cyan]")

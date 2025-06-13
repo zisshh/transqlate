@@ -1,6 +1,7 @@
 """Lightweight SQL dialect post-processing utilities."""
 
 import re
+from typing import Dict
 
 _LIMIT_RE = re.compile(r"\bLIMIT\s+(\d+)\s*(;?)\s*$", re.IGNORECASE)
 
@@ -61,6 +62,70 @@ def mssql_transform(sql: str) -> str:
             out += ";"
     out = re.sub(r"\s+;", ";", out)
     return out.strip()
+
+
+_QUALIFY_RE = re.compile(r"\b(FROM|JOIN)\s+([^\s,;]+)", re.IGNORECASE)
+
+
+def schema_qualify(
+    sql: str,
+    table_schemas: Dict[str, str],
+    default_schema: str,
+    normalize=lambda x: x,
+) -> str:
+    """Prefix unqualified table names using ``table_schemas``.
+
+    Parameters
+    ----------
+    sql : str
+        The SQL string to transform.
+    table_schemas : Dict[str, str]
+        Mapping of table name → schema name.
+    default_schema : str
+        Schema name that does not require qualification.
+
+    Example
+    -------
+    >>> mapping = {"Products": "Sales"}
+    >>> before = 'SELECT TOP 5 Product FROM Products ORDER BY Price DESC;'
+    >>> schema_qualify(before, mapping, "dbo")
+    'SELECT TOP 5 Product FROM Sales.Products ORDER BY Price DESC;'
+    """
+
+    def repl(match: re.Match) -> str:
+        clause, table = match.groups()
+        base = table
+        if base.startswith("[") and base.endswith("]"):
+            base = base[1:-1]
+        if base.startswith("\"") and base.endswith("\""):
+            base = base[1:-1]
+        if "." in base or base.startswith("("):
+            return match.group(0)
+        key = normalize(base)
+        schema = table_schemas.get(key)
+        if schema and schema.lower() != default_schema.lower():
+            return f"{clause} {schema}.{table}"
+        return match.group(0)
+
+    return _QUALIFY_RE.sub(repl, sql)
+
+
+def schema_qualify_mssql(sql: str, table_schemas: Dict[str, str]) -> str:
+    """Wrapper for MS SQL Server (default schema ``dbo``)."""
+    mapping = {k: v for k, v in table_schemas.items()}
+    return schema_qualify(sql, mapping, "dbo", normalize=lambda x: x)
+
+
+def schema_qualify_postgres(sql: str, table_schemas: Dict[str, str]) -> str:
+    """Wrapper for PostgreSQL (default schema ``public``)."""
+    mapping = {k.lower(): v for k, v in table_schemas.items()}
+    return schema_qualify(sql, mapping, "public", normalize=str.lower)
+
+
+def schema_qualify_oracle(sql: str, table_schemas: Dict[str, str], default_schema: str) -> str:
+    """Wrapper for Oracle."""
+    mapping = {k.upper(): v for k, v in table_schemas.items()}
+    return schema_qualify(sql, mapping, default_schema.upper(), normalize=str.upper)
 
 
 def oracle_transform(sql: str) -> str:

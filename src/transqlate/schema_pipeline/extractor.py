@@ -219,6 +219,17 @@ class PostgresSchemaExtractor(BaseSchemaExtractor):
         return [{"from_table": r[0], "from_column": r[1],
                  "to_table": r[2], "to_column": r[3]} for r in rows]
 
+    def extract_schema(self) -> Dict:
+        schema = {"tables": [], "foreign_keys": []}
+        for tbl in self.get_tables():
+            schema["tables"].append({
+                "name": tbl,
+                "schema": self.schema,
+                "columns": self.get_columns(tbl),
+            })
+            schema["foreign_keys"].extend(self.get_foreign_keys(tbl))
+        return schema
+
 
 # ═════════ 3. MySQL / MariaDB ═══════
 class MySQLSchemaExtractor(BaseSchemaExtractor):
@@ -265,10 +276,18 @@ class MSSQLSchemaExtractor(BaseSchemaExtractor):
     dbms = "mssql"
 
     def __init__(self, host, user, password, database,
-                 port=1433, driver=None):
+                 port=1433, driver=None, schema="dbo"):
         if _mssql_driver is None:
             raise ImportError("pyodbc or pymssql required for SQL Server.")
-        logger.info("MS-SQL | %s:%s/%s via %s", host, port, database, _mssql_driver)
+        self.schema = schema
+        logger.info(
+            "MS-SQL | %s:%s/%s via %s (schema=%s)",
+            host,
+            port,
+            database,
+            _mssql_driver,
+            schema,
+        )
 
         if _mssql_driver == "pyodbc":
             driver = driver or "{ODBC Driver 17 for SQL Server}"
@@ -285,17 +304,37 @@ class MSSQLSchemaExtractor(BaseSchemaExtractor):
     def _rows(self, query, params=()):
         return self._safe_exec(query, params)
 
-    def get_tables(self):
-        rows = self._rows("""
-            SELECT TABLE_NAME
+    def _get_tables_with_schema(self):
+        rows = self._rows(
+            """
+            SELECT TABLE_SCHEMA, TABLE_NAME
             FROM INFORMATION_SCHEMA.TABLES
             WHERE TABLE_TYPE='BASE TABLE';
-        """)
-        return [r[0] for r in rows]
+            """
+        )
+        return [(r[1], r[0]) for r in rows]
 
-    def get_columns(self, table):
+    def get_tables(self):
+        return [name for name, _ in self._get_tables_with_schema()]
+
+    def extract_schema(self) -> Dict:
+        schema = {"tables": [], "foreign_keys": []}
+        for name, tbl_schema in self._get_tables_with_schema():
+            schema["tables"].append(
+                {
+                    "name": name,
+                    "schema": tbl_schema,
+                    "columns": self.get_columns(name, tbl_schema),
+                }
+            )
+            schema["foreign_keys"].extend(self.get_foreign_keys(name, tbl_schema))
+        return schema
+
+    def get_columns(self, table, table_schema=None):
+        table_schema = table_schema or self.schema
         placeholder = "?" if _mssql_driver == "pyodbc" else "%s"
-        rows = self._rows(f"""
+        rows = self._rows(
+            f"""
             SELECT c.COLUMN_NAME, c.DATA_TYPE,
                    CASE WHEN k.COLUMN_NAME IS NOT NULL THEN 1 ELSE 0 END
             FROM INFORMATION_SCHEMA.COLUMNS c
@@ -305,14 +344,19 @@ class MSSQLSchemaExtractor(BaseSchemaExtractor):
                 JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
                   ON k.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
                 WHERE tc.TABLE_NAME={placeholder} AND tc.CONSTRAINT_TYPE='PRIMARY KEY'
+                      AND tc.TABLE_SCHEMA={placeholder}
             ) k ON k.COLUMN_NAME = c.COLUMN_NAME
-            WHERE c.TABLE_NAME={placeholder}
-        """, (table, table))
+            WHERE c.TABLE_NAME={placeholder} AND c.TABLE_SCHEMA={placeholder}
+            """,
+            (table, table_schema, table, table_schema)
+        )
         return [{"name": r[0], "type": r[1], "pk": bool(r[2])} for r in rows]
 
-    def get_foreign_keys(self, table):
+    def get_foreign_keys(self, table, table_schema=None):
+        table_schema = table_schema or self.schema
         placeholder = "?" if _mssql_driver == "pyodbc" else "%s"
-        rows = self._rows(f"""
+        rows = self._rows(
+            f"""
             SELECT fk_col.COLUMN_NAME, pk_tab.TABLE_NAME, pk_col.COLUMN_NAME
             FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
             JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS fk_tab
@@ -323,10 +367,19 @@ class MSSQLSchemaExtractor(BaseSchemaExtractor):
                  ON rc.CONSTRAINT_NAME = fk_col.CONSTRAINT_NAME
             JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE pk_col
                  ON pk_tab.CONSTRAINT_NAME = pk_col.CONSTRAINT_NAME
-            WHERE fk_tab.TABLE_NAME={placeholder};
-        """, (table,))
-        return [{"from_table": table, "from_column": r[0],
-                 "to_table": r[1], "to_column": r[2]} for r in rows]
+            WHERE fk_tab.TABLE_NAME={placeholder} AND fk_tab.TABLE_SCHEMA={placeholder};
+            """,
+            (table, table_schema)
+        )
+        return [
+            {
+                "from_table": table,
+                "from_column": r[0],
+                "to_table": r[1],
+                "to_column": r[2],
+            }
+            for r in rows
+        ]
 
 
 # ═════════ 5. Oracle ════════════════
@@ -339,43 +392,64 @@ class OracleSchemaExtractor(BaseSchemaExtractor):
         dsn = cx_Oracle.makedsn(host, port, service_name=service_name)
         logger.info("Oracle | %s:%s/%s", host, port, service_name)
         self.conn = cx_Oracle.connect(user=user, password=password, dsn=dsn)
+        self.default_schema = user.upper()
+
+    def _get_tables_with_schema(self):
+        rows = self._safe_exec("SELECT owner, table_name FROM all_tables")
+        return [(r[1], r[0]) for r in rows]
 
     def get_tables(self):
-        rows = self._safe_exec("SELECT table_name FROM user_tables")
-        return [r[0] for r in rows]
+        return [name for name, _ in self._get_tables_with_schema()]
 
-    def get_columns(self, table):
+    def get_columns(self, table, table_schema=None):
+        table_schema = table_schema or self.default_schema
         tbl_exact = _normalize_identifier(self.dbms, table)
         q = """
             SELECT column_name, data_type,
                    CASE WHEN column_name IN (
                      SELECT acc.column_name
-                     FROM user_constraints ac
-                     JOIN user_cons_columns acc
+                     FROM all_constraints ac
+                     JOIN all_cons_columns acc
                        ON ac.constraint_name = acc.constraint_name
-                     WHERE ac.constraint_type='P' AND ac.table_name=:tbl
+                     WHERE ac.constraint_type='P' AND ac.table_name=:tbl AND ac.owner=:sch
                    ) THEN 1 ELSE 0 END AS is_pk
-            FROM user_tab_columns
-            WHERE table_name=:tbl
+            FROM all_tab_columns
+            WHERE table_name=:tbl AND owner=:sch
         """
-        rows = self._safe_exec(q, {"tbl": tbl_exact})
+        rows = self._safe_exec(q, {"tbl": tbl_exact, "sch": table_schema})
         return [{"name": r[0], "type": r[1], "pk": bool(r[2])} for r in rows]
 
-    def get_foreign_keys(self, table):
+    def get_foreign_keys(self, table, table_schema=None):
+        table_schema = table_schema or self.default_schema
         tbl_exact = _normalize_identifier(self.dbms, table)
         q = """
             SELECT a.column_name,
                    c_pk.table_name,
                    b.column_name
-            FROM user_constraints c
-            JOIN user_cons_columns a ON c.constraint_name = a.constraint_name
-            JOIN user_cons_columns b ON c.r_constraint_name = b.constraint_name
-            JOIN user_constraints c_pk ON c.r_constraint_name = c_pk.constraint_name
-            WHERE c.constraint_type='R' AND c.table_name=:tbl
+            FROM all_constraints c
+            JOIN all_cons_columns a ON c.constraint_name = a.constraint_name
+            JOIN all_cons_columns b ON c.r_constraint_name = b.constraint_name
+            JOIN all_constraints c_pk ON c.r_constraint_name = c_pk.constraint_name
+            WHERE c.constraint_type='R' AND c.table_name=:tbl AND c.owner=:sch
         """
-        rows = self._safe_exec(q, {"tbl": tbl_exact})
-        return [{"from_table": table, "from_column": r[0],
-                 "to_table": r[1], "to_column": r[2]} for r in rows]
+        rows = self._safe_exec(q, {"tbl": tbl_exact, "sch": table_schema})
+        return [
+            {"from_table": table, "from_column": r[0], "to_table": r[1], "to_column": r[2]}
+            for r in rows
+        ]
+
+    def extract_schema(self) -> Dict:
+        schema = {"tables": [], "foreign_keys": []}
+        for name, tbl_schema in self._get_tables_with_schema():
+            schema["tables"].append(
+                {
+                    "name": name,
+                    "schema": tbl_schema,
+                    "columns": self.get_columns(name, tbl_schema),
+                }
+            )
+            schema["foreign_keys"].extend(self.get_foreign_keys(name, tbl_schema))
+        return schema
 
 
 # ═════════ 6. Factory ═══════════════
@@ -394,9 +468,14 @@ def get_schema_extractor(db_type: str, **kwargs) -> BaseSchemaExtractor:
             kwargs["database"], kwargs.get("port", 3306))
     if db_type in ("mssql", "sqlserver"):
         return MSSQLSchemaExtractor(
-            kwargs["host"], kwargs["user"], kwargs["password"],
-            kwargs["database"], kwargs.get("port", 1433),
-            kwargs.get("driver"))
+            kwargs["host"],
+            kwargs["user"],
+            kwargs["password"],
+            kwargs["database"],
+            kwargs.get("port", 1433),
+            kwargs.get("driver"),
+            kwargs.get("schema", "dbo"),
+        )
     if db_type == "oracle":
         return OracleSchemaExtractor(
             kwargs["host"], kwargs["user"], kwargs["password"],
