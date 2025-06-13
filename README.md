@@ -108,6 +108,15 @@ Start the interactive CLI:
 transqlate --interactive
 ```
 
+On first run, the CLI will download the `all-MiniLM-L6-v2` sentence embedding
+model. The model is cached locally so subsequent runs are offline and start
+instantly. If you need to pre-download the embeddings (e.g. on an offline
+machine), run:
+
+```bash
+python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+```
+
 Or run a one-off query:
 
 ```bash

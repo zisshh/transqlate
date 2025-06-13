@@ -44,6 +44,10 @@ from transqlate.schema_pipeline.formatter import format_schema
 from transqlate.schema_pipeline.orchestrator import SchemaRAGOrchestrator
 from transqlate.schema_pipeline.selector import build_table_embeddings
 from transqlate.inference import NL2SQLInference
+from transqlate.embedding_utils import (
+    EmbeddingDownloadError,
+    load_sentence_embedder,
+)
 
 from transformers import AutoTokenizer
 
@@ -604,9 +608,28 @@ def _build_session(args) -> Optional[Session]:
         msg = "Downloading model from Hugging Face Hub..."
     with console.status(f"[bold cyan]{msg}[/bold cyan]", spinner="dots"):
         tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
-        orchestrator = SchemaRAGOrchestrator(tokenizer, schema_dict)
         inference = NL2SQLInference(model_dir=model_id)
-        table_embs = build_table_embeddings(schema_dict, orchestrator._embed)
+
+    try:
+        embed_model = load_sentence_embedder("all-MiniLM-L6-v2")
+    except EmbeddingDownloadError as exc:
+        console.print(
+            Panel(
+                "Failed to download embedding model from Hugging Face. "
+                "Please check your internet connection, or pre-download the model using:\n"
+                "python -c \"from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')\"\n"
+                "The CLI cannot continue without this model.",
+                style="red",
+            )
+        )
+        return None
+
+    orchestrator = SchemaRAGOrchestrator(
+        tokenizer,
+        schema_dict,
+        embed_model=embed_model,
+    )
+    table_embs = build_table_embeddings(schema_dict, orchestrator._embed)
     return Session(
         db_type,
         extractor,
