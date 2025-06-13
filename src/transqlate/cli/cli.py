@@ -493,6 +493,8 @@ class Session:
 
         try:
             cur = self.extractor.conn.cursor()
+            if self.db_type.lower() == "oracle":
+                sql = sql.rstrip().rstrip(";")
             cur.execute(sql)
             if cur.description is None:
                 affected = cur.rowcount
