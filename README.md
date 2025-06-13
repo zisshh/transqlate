@@ -155,6 +155,27 @@ SELECT * FROM Employees;  -- employees in HR schema
 SELECT * FROM HR.Employees;
 ```
 
+### Troubleshooting Oracle Schema Extraction
+
+The Oracle extractor pulls tables from `USER_TABLES`. If your schema
+contains Oracle demo or system tables, they will appear in `:show schema`
+and in NL→SQL prompts. You can hide them by providing a list of prefixes
+to ignore:
+
+```python
+ex = get_schema_extractor(
+    "oracle",
+    host="HOST",
+    user="USER",
+    password="PW",
+    service_name="SERVICE",
+    ignore_table_prefixes=["MVIEW$_", "APEX$_", "DEMO_"]
+)
+```
+
+Drop the tables or customise the list as needed to keep the schema view
+clean.
+
 ---
 
 ## Development & Contribution

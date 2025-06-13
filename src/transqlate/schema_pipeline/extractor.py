@@ -43,6 +43,13 @@ try:
     import cx_Oracle
 except ImportError:
     cx_Oracle = None
+
+# Prefixes for Oracle demo/system tables that should usually be ignored
+ORACLE_IGNORE_TABLE_PREFIXES = [
+    "MVIEW$_",
+    "APEX$_",
+    "DEMO_",
+]
 # ────────────────────────────────────
 
 logging.basicConfig(level=logging.INFO,
@@ -386,17 +393,29 @@ class MSSQLSchemaExtractor(BaseSchemaExtractor):
 class OracleSchemaExtractor(BaseSchemaExtractor):
     dbms = "oracle"
 
-    def __init__(self, host, user, password, service_name, port=1521):
+    def __init__(self, host, user, password, service_name, port=1521,
+                 ignore_table_prefixes=None):
         if cx_Oracle is None:
             raise ImportError("cx_Oracle required for Oracle support.")
         dsn = cx_Oracle.makedsn(host, port, service_name=service_name)
         logger.info("Oracle | %s:%s/%s", host, port, service_name)
         self.conn = cx_Oracle.connect(user=user, password=password, dsn=dsn)
         self.default_schema = user.upper()
+        self.ignore_prefixes = (
+            [p.upper() for p in ignore_table_prefixes]
+            if ignore_table_prefixes is not None
+            else ORACLE_IGNORE_TABLE_PREFIXES
+        )
 
     def _get_tables_with_schema(self):
         rows = self._safe_exec("SELECT table_name FROM user_tables")
-        return [(r[0], self.default_schema) for r in rows]
+        names = [r[0] for r in rows]
+        if self.ignore_prefixes:
+            names = [
+                n for n in names
+                if not any(n.startswith(p) for p in self.ignore_prefixes)
+            ]
+        return [(n, self.default_schema) for n in names]
 
     def get_tables(self):
         return [name for name, _ in self._get_tables_with_schema()]
@@ -477,7 +496,8 @@ def get_schema_extractor(db_type: str, **kwargs) -> BaseSchemaExtractor:
     if db_type == "oracle":
         return OracleSchemaExtractor(
             kwargs["host"], kwargs["user"], kwargs["password"],
-            kwargs["service_name"], kwargs.get("port", 1521))
+            kwargs["service_name"], kwargs.get("port", 1521),
+            kwargs.get("ignore_table_prefixes"))
     raise ValueError(f"Unsupported database type: {db_type}")
 
 
