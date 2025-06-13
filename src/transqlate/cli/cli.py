@@ -54,7 +54,24 @@ from transqlate import sql_transform
 from transformers import AutoTokenizer
 
 console = Console()
+
+
+class _Spinner:
+    """Simple wrapper around rich console.status."""
+
+    def __init__(self, message: str) -> None:
+        self._status = console.status(f"[bold cyan]{message}[/bold cyan]", spinner="dots")
+
+    def start(self) -> None:
+        self._status.__enter__()
+
+    def stop(self) -> None:
+        self._status.__exit__(None, None, None)
+
+
 _SQL_SPLIT_RE = re.compile(r"\bSQL\s*:\s*", re.IGNORECASE)
+
+_GLOBAL_SPINNER: Optional[_Spinner] = None
 
 # Map supported DB types to display names used in the CLI
 _DB_DISPLAY_NAMES = {
@@ -278,7 +295,11 @@ def _collect_db_params(db_type: str) -> Tuple[str, dict]:
             params["service_name"] = params.pop("database")
     return db_type, params
 
-def _choose_db_interactively() -> Tuple[str, dict]:
+def _choose_db_interactively(spinner: Optional[_Spinner] = None) -> Tuple[str, dict]:
+    if spinner:
+        spinner.stop()
+    elif _GLOBAL_SPINNER:
+        _GLOBAL_SPINNER.stop()
     console.print(
         Panel(
             "[bold cyan]Let's connect to your database![/bold cyan]\n"
@@ -513,7 +534,7 @@ class Session:
                 if resp.lower().startswith("y"):
                     reconnect_ok = self.reconnect()
                 elif resp.lower().startswith("change"):
-                    new_db_type, new_params = _choose_db_interactively()
+                    new_db_type, new_params = _choose_db_interactively(_GLOBAL_SPINNER)
                     self.db_type = new_db_type
                     self.connection_params = new_params
                     reconnect_ok = self.reconnect()
@@ -610,7 +631,7 @@ def _build_session(args) -> Optional[Session]:
                 if v is not None
             }
         else:
-            db_type, params = _choose_db_interactively()
+            db_type, params = _choose_db_interactively(_GLOBAL_SPINNER)
         try:
             with console.status("[bold cyan]Connecting to database...[/bold cyan]", spinner="dots"):
                 extractor = get_schema_extractor(db_type, **params)
@@ -915,7 +936,7 @@ def repl(session: Session, run_sql: bool, max_new_tokens: int):
                         style="yellow",
                     )
                 )
-                new_db_type, new_params = _choose_db_interactively()
+                new_db_type, new_params = _choose_db_interactively(_GLOBAL_SPINNER)
                 try:
                     new_extractor = get_schema_extractor(new_db_type, **new_params)
                     new_schema_dict = new_extractor.extract_schema()
@@ -981,6 +1002,10 @@ def oneshot(session: Session, question: str, execute: bool, max_new_tokens: int)
     _print_result(session, question, cot_text, sql_text, execute)
 
 def main():
+    global _GLOBAL_SPINNER
+    _GLOBAL_SPINNER = _Spinner("Starting up...")
+    _GLOBAL_SPINNER.start()
+
     parser = argparse.ArgumentParser("transqlate – Natural Language to SQL CLI")
     parser.add_argument("--interactive", action="store_true", help="Run REPL")
     parser.add_argument("--question", "-q", help="One-shot natural language question")
@@ -1015,6 +1040,9 @@ def main():
     if not args.interactive and not args.question:
         parser.error("Provide --interactive or --question/-q.")
     session = _build_session(args)
+    if _GLOBAL_SPINNER:
+        _GLOBAL_SPINNER.stop()
+        _GLOBAL_SPINNER = None
     if session is None:
         sys.exit(1)
     if args.interactive:
