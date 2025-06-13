@@ -116,14 +116,13 @@ def extract_sql(sql_text: str, cot_text: str) -> str:
         or not candidate.rstrip().endswith(";")
         or candidate.lower().count("select") > 1
         or candidate.lower().endswith("group by")
-        or candidate.count("\n") < 2
     )
     if is_incomplete:
         match = re.search(r"```sql\s*(.+?)```", cot_text, re.DOTALL | re.IGNORECASE)
         if match:
             candidate = match.group(1).strip()
         else:
-            match2 = re.findall(r"(SELECT|INSERT|UPDATE|DELETE).*?;", cot_text, re.IGNORECASE | re.DOTALL)
+            match2 = re.findall(r"((?:SELECT|INSERT|UPDATE|DELETE).*?;)", cot_text, re.IGNORECASE | re.DOTALL)
             if match2:
                 candidate = match2[-1]
             else:
@@ -458,7 +457,7 @@ class Session:
                 )
             )
             return False
-        if self.db_type.lower() == "mssql":
+        if self.db_type.lower() in {"mssql", "sqlserver"}:
             sql = _post_process_mssql_sql(sql)
         # -- DDL/DML confirmation prompt --
         if self.DDL_DML_PATTERN.match(sql):
@@ -731,9 +730,25 @@ def _print_result(session: Session, question: str, cot_text: str, sql_text: str,
     console.print(cleaned_cot)
     best_sql = extract_sql(sql_text, cot_text)
     if best_sql:
-        console.print("\n[bold cyan]SQL:[/bold cyan]")
-        console.print(best_sql, style="bold cyan")
-        entry = session.add_history(question, best_sql)
+        final_sql = best_sql
+        if session.db_type.lower() in {"mssql", "sqlserver"}:
+            adjusted = _post_process_mssql_sql(best_sql)
+            if adjusted != best_sql:
+                console.print("\n[bold cyan]SQL (model):[/bold cyan]")
+                console.print(best_sql, style="bold cyan")
+                console.print(
+                    "[green]\n\N{anticlockwise open circle arrow} Adapted from SQLite \u2192 T-SQL for SQL Server.[/green]"
+                )
+                console.print("[bold cyan]SQL (T-SQL):[/bold cyan]")
+                console.print(adjusted, style="cyan")
+            else:
+                console.print("\n[bold cyan]SQL:[/bold cyan]")
+                console.print(adjusted, style="bold cyan")
+            final_sql = adjusted
+        else:
+            console.print("\n[bold cyan]SQL:[/bold cyan]")
+            console.print(best_sql, style="bold cyan")
+        entry = session.add_history(question, final_sql)
         if run_sql:
             session.run_history_entry(entry)
 
