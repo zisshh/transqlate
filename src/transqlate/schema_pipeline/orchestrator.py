@@ -13,6 +13,10 @@ from transqlate.schema_pipeline.graph import build_schema_graph
 from transqlate.schema_pipeline.selector import build_table_embeddings, select_tables
 from sentence_transformers import SentenceTransformer
 from transformers import AutoTokenizer
+from transqlate.embedding_utils import (
+    EmbeddingDownloadError,
+    load_sentence_embedder,
+)
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -48,7 +52,7 @@ class SchemaRAGOrchestrator:
         )
 
         self._G = build_schema_graph(schema)
-        self._embed = embed_model or SentenceTransformer("all-MiniLM-L6-v2")
+        self._embed = embed_model or load_sentence_embedder("all-MiniLM-L6-v2")
         self._table_embs = build_table_embeddings(schema, self._embed)
 
     def _encode_len(self, txt: str) -> int:
