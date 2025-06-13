@@ -714,23 +714,27 @@ def _prompt_edit_sql(original_sql: str) -> Optional[str]:
     Returns the edited SQL, or ``None`` if editing was cancelled.
     """
     console.print(Panel(original_sql, title="Current SQL", style="cyan"))
-    console.print(
-        "[dim]Enter new SQL. Submit empty line to cancel or type 'CANCEL' on a new line.[/dim]"
+    instructions = (
+        "Enter your new SQL query below.\n"
+        "- Press Enter to add a new line (multi-line editing supported).\n"
+        "- When finished, type ':submit' or ':finish' on a new line to confirm and save your query.\n"
+        "- To cancel, type ':cancel' on a new line."
     )
+    console.print(Panel(instructions, title="Edit", style="dim"))
     lines: List[str] = []
     while True:
         try:
             new_line = input()
         except EOFError:
             break
-        if not lines and new_line.strip() == "":
-            return None
-        if new_line.strip().upper() == "CANCEL":
-            return None
-        if new_line == "":
+        stripped = new_line.strip()
+        upper = stripped.upper()
+        if upper in {":SUBMIT", ":FINISH"}:
             break
+        if upper == ":CANCEL":
+            return None
         lines.append(new_line)
-    edited = "\n".join(lines).strip()
+    edited = "\n".join(lines).rstrip()
     if not edited:
         return None
     return edited
@@ -786,7 +790,7 @@ def repl(session: Session, run_sql: bool, max_new_tokens: int):
                 else:
                     edited = _prompt_edit_sql(session.history[-1][1])
                     if edited is None:
-                        console.print("[yellow]Edit cancelled. SQL unchanged.[/yellow]")
+                        console.print("[yellow]SQL edit cancelled. The original query is preserved.[/yellow]")
                     else:
                         question = session.history[-1][0]
                         session.history.append((question + " [edited]", edited))
