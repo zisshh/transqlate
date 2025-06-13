@@ -294,7 +294,8 @@ class MSSQLSchemaExtractor(BaseSchemaExtractor):
         return [r[0] for r in rows]
 
     def get_columns(self, table):
-        rows = self._rows("""
+        placeholder = "?" if _mssql_driver == "pyodbc" else "%s"
+        rows = self._rows(f"""
             SELECT c.COLUMN_NAME, c.DATA_TYPE,
                    CASE WHEN k.COLUMN_NAME IS NOT NULL THEN 1 ELSE 0 END
             FROM INFORMATION_SCHEMA.COLUMNS c
@@ -303,14 +304,15 @@ class MSSQLSchemaExtractor(BaseSchemaExtractor):
                 FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE k
                 JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
                   ON k.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
-                WHERE tc.TABLE_NAME=%s AND tc.CONSTRAINT_TYPE='PRIMARY KEY'
+                WHERE tc.TABLE_NAME={placeholder} AND tc.CONSTRAINT_TYPE='PRIMARY KEY'
             ) k ON k.COLUMN_NAME = c.COLUMN_NAME
-            WHERE c.TABLE_NAME=%s
+            WHERE c.TABLE_NAME={placeholder}
         """, (table, table))
         return [{"name": r[0], "type": r[1], "pk": bool(r[2])} for r in rows]
 
     def get_foreign_keys(self, table):
-        rows = self._rows("""
+        placeholder = "?" if _mssql_driver == "pyodbc" else "%s"
+        rows = self._rows(f"""
             SELECT fk_col.COLUMN_NAME, pk_tab.TABLE_NAME, pk_col.COLUMN_NAME
             FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
             JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS fk_tab
@@ -321,7 +323,7 @@ class MSSQLSchemaExtractor(BaseSchemaExtractor):
                  ON rc.CONSTRAINT_NAME = fk_col.CONSTRAINT_NAME
             JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE pk_col
                  ON pk_tab.CONSTRAINT_NAME = pk_col.CONSTRAINT_NAME
-            WHERE fk_tab.TABLE_NAME=%s;
+            WHERE fk_tab.TABLE_NAME={placeholder};
         """, (table,))
         return [{"from_table": table, "from_column": r[0],
                  "to_table": r[1], "to_column": r[2]} for r in rows]
