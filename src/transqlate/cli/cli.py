@@ -18,6 +18,7 @@ import re
 import traceback
 from getpass import getpass
 from typing import List, Optional, Tuple
+from dataclasses import dataclass
 
 try:
     from pwinput import pwinput  # type: ignore
@@ -86,6 +87,14 @@ _DB_TROUBLESHOOT = {
 # Toggle for showing Python tracebacks with errors. Can be enabled via
 # the --tracebacks CLI flag during debugging.
 SHOW_TRACEBACKS = False
+
+
+@dataclass
+class HistoryEntry:
+    question: str
+    sql: str
+    edited: bool = False
+    execution_status: Optional[bool] = None
 
 
 def _positive_int(value: str) -> int:
@@ -389,9 +398,18 @@ class Session:
         self.tokenizer = tokenizer
         self.orchestrator = orchestrator
         self.inference = inference
-        self.history: List[Tuple[str, str]] = []
+        self.history: List[HistoryEntry] = []
         self.table_embs = table_embs
         self.connection_params = connection_params or {}
+
+    def add_history(self, question: str, sql: str, edited: bool = False) -> HistoryEntry:
+        entry = HistoryEntry(question=question, sql=sql, edited=edited)
+        self.history.append(entry)
+        return entry
+
+    def run_history_entry(self, entry: HistoryEntry) -> None:
+        status = self.execute_sql(entry.sql)
+        entry.execution_status = status
 
     # ------------------------------------------------------------------
     # Connection handling
@@ -421,7 +439,7 @@ class Session:
             _print_exception(exc)
             return False
 
-    def execute_sql(self, sql: str):
+    def execute_sql(self, sql: str) -> bool:
         if _looks_incomplete(sql):
             console.print(
                 Panel(
@@ -429,7 +447,7 @@ class Session:
                     style="red",
                 )
             )
-            return
+            return False
         if self.db_type.lower() == "mssql":
             sql = _post_process_mssql_sql(sql)
         # -- DDL/DML confirmation prompt --
@@ -442,7 +460,7 @@ class Session:
             resp = Prompt.ask("[bold red]Are you sure you want to execute this statement?[/bold red] (y/N)", default="N")
             if resp.strip().lower() not in ("y", "yes"):
                 console.print("[yellow]Cancelled. Statement not executed.[/yellow]")
-                return
+                return False
 
         try:
             cur = self.extractor.conn.cursor()
@@ -459,6 +477,7 @@ class Session:
                 rows = cur.fetchall()
                 cols = [d[0] for d in cur.description]
                 self._pretty_table(rows, cols)
+            return True
         except Exception as e:
             try:
                 self.extractor.conn.rollback()
@@ -502,10 +521,10 @@ class Session:
                     )
                 if retry_sql and reconnect_ok:
                     try:
-                        self.execute_sql(sql)
+                        return self.execute_sql(sql)
                     except Exception as e2:
                         _print_exception(e2)
-                return
+                return False
             if "current transaction is aborted" in lower or "infailedsqltransaction" in lower:
                 console.print(
                     Panel(
@@ -522,6 +541,7 @@ class Session:
                 )
             else:
                 console.print(Panel(f"Error executing query:\n{msg}", style="red"))
+            return False
 
     def _pretty_table(self, rows, cols):
         if not rows:
@@ -703,9 +723,9 @@ def _print_result(session: Session, question: str, cot_text: str, sql_text: str,
     if best_sql:
         console.print("\n[bold cyan]SQL:[/bold cyan]")
         console.print(best_sql, style="bold cyan")
-        session.history.append((question, best_sql))
+        entry = session.add_history(question, best_sql)
         if run_sql:
-            session.execute_sql(best_sql)
+            session.run_history_entry(entry)
 
 
 def _prompt_edit_sql(original_sql: str) -> Optional[str]:
@@ -775,25 +795,37 @@ def repl(session: Session, run_sql: bool, max_new_tokens: int):
                     style="cyan",
                 )
             elif cmd == "history":
-                for i, (q, s) in enumerate(session.history[-10:], 1):
-                    console.print(f"[yellow]{i}.[/yellow] {q} → [cyan]{s}[/cyan]")
+                for i, entry in enumerate(session.history[-10:], 1):
+                    labels = []
+                    if entry.edited:
+                        labels.append("edited")
+                    if entry.execution_status is True:
+                        labels.append("success")
+                    elif entry.execution_status is False:
+                        labels.append("failed")
+                    label_text = "".join(f" ({lbl})" for lbl in labels)
+                    console.print(f"[yellow]{i}.[/yellow] {entry.question}{label_text}")
+                    console.print("   →")
+                    indented_sql = "\n".join("   " + line for line in entry.sql.splitlines())
+                    console.print(indented_sql, style="cyan")
             elif cmd == "show" and rest and rest[0] == "schema":
                 console.print(format_schema(session.schema_dict))
             elif cmd == "run":
                 if not session.history:
                     console.print("[yellow]No previous query to run.[/yellow]")
                 else:
-                    session.execute_sql(session.history[-1][1])
+                    entry = session.history[-1]
+                    session.run_history_entry(entry)
             elif cmd == "edit":
                 if not session.history:
                     console.print("[yellow]No SQL query to edit.[/yellow]")
                 else:
-                    edited = _prompt_edit_sql(session.history[-1][1])
+                    edited = _prompt_edit_sql(session.history[-1].sql)
                     if edited is None:
                         console.print("[yellow]SQL edit cancelled. The original query is preserved.[/yellow]")
                     else:
-                        question = session.history[-1][0]
-                        session.history.append((question + " [edited]", edited))
+                        question = session.history[-1].question
+                        session.add_history(question, edited, edited=True)
                         console.print("[green]SQL updated. Use :run to execute.[/green]")
             elif cmd == "examples":
                 console.print(
@@ -866,7 +898,7 @@ def repl(session: Session, run_sql: bool, max_new_tokens: int):
                     new_tok = Prompt.ask("Correction", default=sugg[0])
                     if new_tok.strip() and new_tok != token:
                         line = line.replace(token, new_tok)
-                        session.history.append((f"(ambig {token}->{new_tok}) {line}", ""))
+                        session.add_history(f"(ambig {token}->{new_tok}) {line}", "")
                         continue
             _print_exception(e)
 
