@@ -95,6 +95,7 @@ class HistoryEntry:
     question: str
     sql: str
     edited: bool = False
+    user_written: bool = False
     execution_status: Optional[bool] = None
 
 
@@ -378,8 +379,15 @@ class Session:
             t["name"]: t.get("schema", default_schema) for t in schema_dict.get("tables", [])
         }
 
-    def add_history(self, question: str, sql: str, edited: bool = False) -> HistoryEntry:
-        entry = HistoryEntry(question=question, sql=sql, edited=edited)
+    def add_history(
+        self, question: str, sql: str, edited: bool = False, user_written: bool = False
+    ) -> HistoryEntry:
+        entry = HistoryEntry(
+            question=question,
+            sql=sql,
+            edited=edited,
+            user_written=user_written,
+        )
         self.history.append(entry)
         return entry
 
@@ -751,9 +759,9 @@ def _prompt_edit_sql(original_sql: str) -> Optional[str]:
     """
     console.print(Panel(original_sql, title="Current SQL", style="cyan"))
     instructions = (
-        "Enter your new SQL query below.\n"
-        "- Press Enter to add a new line (multi-line editing supported).\n"
-        "- When finished, type ':submit' or ':finish' on a new line to confirm and save your query.\n"
+        "Edit your SQL query below.\n"
+        "- Press Enter to add a new line.\n"
+        "- When finished, type ':finish' on a new line to submit.\n"
         "- To cancel, type ':cancel' on a new line."
     )
     console.print(Panel(instructions, title="Edit", style="dim"))
@@ -765,7 +773,7 @@ def _prompt_edit_sql(original_sql: str) -> Optional[str]:
             break
         stripped = new_line.strip()
         upper = stripped.upper()
-        if upper in {":SUBMIT", ":FINISH"}:
+        if upper == ":FINISH":
             break
         if upper == ":CANCEL":
             return None
@@ -774,6 +782,34 @@ def _prompt_edit_sql(original_sql: str) -> Optional[str]:
     if not edited:
         return None
     return edited
+
+
+def _prompt_write_sql() -> Optional[str]:
+    """Prompt user to manually write an SQL query."""
+    instructions = (
+        "Write your SQL query below.\n"
+        "- Press Enter to add a new line.\n"
+        "- When finished, type ':finish' on a new line to submit.\n"
+        "- To cancel, type ':cancel' on a new line."
+    )
+    console.print(Panel(instructions, title="Write", style="dim"))
+    lines: List[str] = []
+    while True:
+        try:
+            new_line = input()
+        except EOFError:
+            break
+        stripped = new_line.strip()
+        upper = stripped.upper()
+        if upper == ":FINISH":
+            break
+        if upper == ":CANCEL":
+            return None
+        lines.append(new_line)
+    sql = "\n".join(lines).rstrip()
+    if not sql:
+        return None
+    return sql
 
 def repl(session: Session, run_sql: bool, max_new_tokens: int):
     console.print(
@@ -803,6 +839,7 @@ def repl(session: Session, run_sql: bool, max_new_tokens: int):
                     ":show schema – print formatted schema\n"
                     ":run – re-run last SQL against DB\n"
                     ":edit – edit last SQL before running\n"
+                    ":write – manually enter a SQL query\n"
                     ":examples – sample NL prompts\n"
                     ":clear – clear screen\n"
                     ":change_db – switch to a new database connection\n"
@@ -813,6 +850,8 @@ def repl(session: Session, run_sql: bool, max_new_tokens: int):
             elif cmd == "history":
                 for i, entry in enumerate(session.history[-10:], 1):
                     labels = []
+                    if entry.user_written:
+                        labels.append("user-written")
                     if entry.edited:
                         labels.append("edited")
                     if entry.execution_status is True:
@@ -843,6 +882,13 @@ def repl(session: Session, run_sql: bool, max_new_tokens: int):
                         question = session.history[-1].question
                         session.add_history(question, edited, edited=True)
                         console.print("[green]SQL updated. Use :run to execute.[/green]")
+            elif cmd == "write":
+                manual_sql = _prompt_write_sql()
+                if manual_sql is None:
+                    console.print("[yellow]Manual SQL entry cancelled.[/yellow]")
+                else:
+                    session.add_history("", manual_sql, user_written=True)
+                    console.print("[green]Manual SQL entry added. Use :run to execute.[/green]")
             elif cmd == "examples":
                 console.print(
                     "- Show me total sales by month in 2023\n"
