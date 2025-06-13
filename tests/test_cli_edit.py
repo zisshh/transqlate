@@ -4,7 +4,7 @@ import importlib
 from pathlib import Path
 
 
-def load_prompt_edit_sql():
+def load_prompt_functions():
     stub_names = {
         "rich": types.ModuleType("rich"),
         "rich.console": types.ModuleType("rich.console"),
@@ -43,13 +43,13 @@ def load_prompt_edit_sql():
                 del sys.modules[name]
             else:
                 sys.modules[name] = mod
-    return cli._prompt_edit_sql
+    return cli._prompt_edit_sql, cli._prompt_write_sql
 
-_prompt_edit_sql = load_prompt_edit_sql()
+_prompt_edit_sql, _prompt_write_sql = load_prompt_functions()
 
 
-def test_submit(monkeypatch):
-    inputs = iter(["SELECT 1;", ":submit"])
+def test_finish(monkeypatch):
+    inputs = iter(["SELECT 1;", ":finish"])
     def fake_input(prompt=""):
         return next(inputs)
     monkeypatch.setattr("builtins.input", fake_input)
@@ -73,3 +73,17 @@ def test_multiline(monkeypatch):
     monkeypatch.setattr("builtins.input", fake_input)
     result = _prompt_edit_sql("SELECT * FROM old")
     assert result == "SELECT\n*\nFROM t"
+
+
+def test_write_cancel(monkeypatch):
+    inputs = iter([":cancel"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
+    result = _prompt_write_sql()
+    assert result is None
+
+
+def test_write_multiline(monkeypatch):
+    inputs = iter(["SELECT", "*", "FROM x", ":finish"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
+    result = _prompt_write_sql()
+    assert result == "SELECT\n*\nFROM x"
