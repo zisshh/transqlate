@@ -568,8 +568,9 @@ def _build_session(args) -> Optional[Session]:
         else:
             db_type, params = _choose_db_interactively()
         try:
-            extractor = get_schema_extractor(db_type, **params)
-            schema_dict = extractor.extract_schema()
+            with console.status("[bold cyan]Connecting to database...[/bold cyan]", spinner="dots"):
+                extractor = get_schema_extractor(db_type, **params)
+                schema_dict = extractor.extract_schema()
             console.print(f"[green]✓ Connected to {db_type} database.[/green]")
             break
         except Exception as e:
@@ -597,18 +598,15 @@ def _build_session(args) -> Optional[Session]:
             continue
     model_id = args.model or "Shaurya-Sethi/transqlate-phi4"
     model_id = model_id.replace("\\", "/")
-    if model_id == "Shaurya-Sethi/transqlate-phi4":
-        console.print(
-            Panel(
-                f"[bold]Downloading/loading model from Hugging Face Hub:[/bold]\n[cyan]{model_id}[/cyan]\n"
-                "This may take a few minutes the first time.",
-                style="cyan",
-            )
-        )
-    tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
-    orchestrator = SchemaRAGOrchestrator(tokenizer, schema_dict)
-    inference = NL2SQLInference(model_dir=model_id)
-    table_embs = build_table_embeddings(schema_dict, orchestrator._embed)
+
+    msg = "Loading model from Hugging Face..."
+    if not Path(model_id).exists():
+        msg = "Downloading model from Hugging Face Hub..."
+    with console.status(f"[bold cyan]{msg}[/bold cyan]", spinner="dots"):
+        tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
+        orchestrator = SchemaRAGOrchestrator(tokenizer, schema_dict)
+        inference = NL2SQLInference(model_dir=model_id)
+        table_embs = build_table_embeddings(schema_dict, orchestrator._embed)
     return Session(
         db_type,
         extractor,
