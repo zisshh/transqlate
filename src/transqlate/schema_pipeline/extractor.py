@@ -395,44 +395,42 @@ class OracleSchemaExtractor(BaseSchemaExtractor):
         self.default_schema = user.upper()
 
     def _get_tables_with_schema(self):
-        rows = self._safe_exec("SELECT owner, table_name FROM all_tables")
-        return [(r[1], r[0]) for r in rows]
+        rows = self._safe_exec("SELECT table_name FROM user_tables")
+        return [(r[0], self.default_schema) for r in rows]
 
     def get_tables(self):
         return [name for name, _ in self._get_tables_with_schema()]
 
     def get_columns(self, table, table_schema=None):
-        table_schema = table_schema or self.default_schema
         tbl_exact = _normalize_identifier(self.dbms, table)
         q = """
             SELECT column_name, data_type,
                    CASE WHEN column_name IN (
                      SELECT acc.column_name
-                     FROM all_constraints ac
-                     JOIN all_cons_columns acc
+                     FROM user_constraints ac
+                     JOIN user_cons_columns acc
                        ON ac.constraint_name = acc.constraint_name
-                     WHERE ac.constraint_type='P' AND ac.table_name=:tbl AND ac.owner=:sch
+                     WHERE ac.constraint_type='P' AND ac.table_name=:tbl
                    ) THEN 1 ELSE 0 END AS is_pk
-            FROM all_tab_columns
-            WHERE table_name=:tbl AND owner=:sch
+            FROM user_tab_columns
+            WHERE table_name=:tbl
         """
-        rows = self._safe_exec(q, {"tbl": tbl_exact, "sch": table_schema})
+        rows = self._safe_exec(q, {"tbl": tbl_exact})
         return [{"name": r[0], "type": r[1], "pk": bool(r[2])} for r in rows]
 
     def get_foreign_keys(self, table, table_schema=None):
-        table_schema = table_schema or self.default_schema
         tbl_exact = _normalize_identifier(self.dbms, table)
         q = """
             SELECT a.column_name,
                    c_pk.table_name,
                    b.column_name
-            FROM all_constraints c
-            JOIN all_cons_columns a ON c.constraint_name = a.constraint_name
-            JOIN all_cons_columns b ON c.r_constraint_name = b.constraint_name
-            JOIN all_constraints c_pk ON c.r_constraint_name = c_pk.constraint_name
-            WHERE c.constraint_type='R' AND c.table_name=:tbl AND c.owner=:sch
+            FROM user_constraints c
+            JOIN user_cons_columns a ON c.constraint_name = a.constraint_name
+            JOIN user_cons_columns b ON c.r_constraint_name = b.constraint_name
+            JOIN user_constraints c_pk ON c.r_constraint_name = c_pk.constraint_name
+            WHERE c.constraint_type='R' AND c.table_name=:tbl
         """
-        rows = self._safe_exec(q, {"tbl": tbl_exact, "sch": table_schema})
+        rows = self._safe_exec(q, {"tbl": tbl_exact})
         return [
             {"from_table": table, "from_column": r[0], "to_table": r[1], "to_column": r[2]}
             for r in rows

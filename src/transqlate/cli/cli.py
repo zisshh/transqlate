@@ -82,7 +82,17 @@ _DB_TROUBLESHOOT = {
             "4. Restart the SQL Server service after making changes.",
             "5. Allow TCP port 1433 through the firewall if connecting remotely.",
         ]
-    )
+    ),
+    "oracle": "\n".join(
+        [
+            "1. Download and extract the Oracle Instant Client (Basic or Basic Lite, 64-bit).",
+            "2. Add the folder containing `oci.dll` (e.g., `C:\\path\\to\\instantclient_XX_X`) to your system PATH.",
+            "3. Close all terminals/IDEs and restart your computer to load the updated PATH.",
+            "4. Ensure your Python installation is 64-bit to match the Instant Client bitness.",
+            "5. For `python-oracledb`, you can use thin mode without needing the Instant Client.",
+            "6. Retry your connection.",
+        ]
+    ),
 }
 
 # Toggle for showing Python tracebacks with errors. Can be enabled via
