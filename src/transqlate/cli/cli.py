@@ -66,6 +66,19 @@ _DB_NAME_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# Database-specific troubleshooting instructions
+_DB_TROUBLESHOOT = {
+    "mssql": "\n".join(
+        [
+            "1. Enable SQL Server Authentication in SSMS (Server > Properties > Security).",
+            "2. Set a password for the `sa` account and ensure it is enabled (Security > Logins > sa).",
+            "3. Enable TCP/IP via SQL Server Configuration Manager and set port 1433 (Protocols for SQLEXPRESS).",
+            "4. Restart the SQL Server service after making changes.",
+            "5. Allow TCP port 1433 through the firewall if connecting remotely.",
+        ]
+    )
+}
+
 # Toggle for showing Python tracebacks with errors. Can be enabled via
 # the --tracebacks CLI flag during debugging.
 SHOW_TRACEBACKS = False
@@ -123,6 +136,17 @@ def _fix_cot_dbms(cot_text: str, db_type: str) -> str:
 
     return _DB_NAME_PATTERN.sub(repl, cot_text)
 
+
+def _print_troubleshooting(db_type: str) -> None:
+    """Display troubleshooting steps for the given DB type."""
+    text = _DB_TROUBLESHOOT.get(db_type.lower())
+    if not text:
+        text = (
+            "Check your host, port, username, password and database name. "
+            "Ensure the server is reachable."
+        )
+    console.print(Panel(text, title="Troubleshooting", style="cyan"))
+
 def _collect_db_params(db_type: str) -> Tuple[str, dict]:
     params = {}
     if db_type == "sqlite":
@@ -133,6 +157,9 @@ def _collect_db_params(db_type: str) -> Tuple[str, dict]:
                 "[yellow]Do NOT wrap the path in quotes. If you copied it with quotes, remove them.[/yellow]"
             )
             db_path = Prompt.ask(msg, default="example.db")
+            if db_path.strip().lower().lstrip(":") == "troubleshoot":
+                _print_troubleshooting(db_type)
+                continue
             if (db_path.startswith('"') and db_path.endswith('"')) or (db_path.startswith("'") and db_path.endswith("'")):
                 console.print(
                     "[red]Please remove the wrapping quotes from your path and try again.[/red]"
@@ -141,7 +168,13 @@ def _collect_db_params(db_type: str) -> Tuple[str, dict]:
             params["db_path"] = db_path
             break
     else:
-        params["host"] = Prompt.ask("Host", default="localhost")
+        while True:
+            host = Prompt.ask("Host", default="localhost")
+            if host.strip().lower().lstrip(":") == "troubleshoot":
+                _print_troubleshooting(db_type)
+                continue
+            params["host"] = host
+            break
         default_port = {
             "postgres": "5432",
             "postgresql": "5432",
@@ -149,17 +182,56 @@ def _collect_db_params(db_type: str) -> Tuple[str, dict]:
             "mssql": "1433",
             "oracle": "1521",
         }.get(db_type, "5432")
-        params["port"] = int(Prompt.ask("Port", default=default_port))
+        while True:
+            port_val = Prompt.ask("Port", default=default_port)
+            if port_val.strip().lower().lstrip(":") == "troubleshoot":
+                _print_troubleshooting(db_type)
+                continue
+            try:
+                params["port"] = int(port_val)
+                break
+            except ValueError:
+                console.print("[red]Port must be a number.[/red]")
         if db_type in {"postgres", "postgresql"}:
-            params["dbname"] = Prompt.ask("Database name")
+            while True:
+                dbn = Prompt.ask("Database name")
+                if dbn.strip().lower().lstrip(":") == "troubleshoot":
+                    _print_troubleshooting(db_type)
+                    continue
+                params["dbname"] = dbn
+                break
         else:
-            params["database"] = Prompt.ask("Database name")
-        params["user"] = Prompt.ask("Username")
+            while True:
+                dbn = Prompt.ask("Database name")
+                if dbn.strip().lower().lstrip(":") == "troubleshoot":
+                    _print_troubleshooting(db_type)
+                    continue
+                params["database"] = dbn
+                break
+        while True:
+            user = Prompt.ask("Username")
+            if user.strip().lower().lstrip(":") == "troubleshoot":
+                _print_troubleshooting(db_type)
+                continue
+            params["user"] = user
+            break
         console.print("[dim](Your password will not be shown as you type.)[/dim]")
         if pwinput:
-            params["password"] = pwinput(prompt="Password: ", mask="*")
+            while True:
+                pw = pwinput(prompt="Password: ", mask="*")
+                if pw.strip().lower().lstrip(":") == "troubleshoot":
+                    _print_troubleshooting(db_type)
+                    continue
+                params["password"] = pw
+                break
         else:
-            params["password"] = getpass("Password: ")
+            while True:
+                pw = getpass("Password: ")
+                if pw.strip().lower().lstrip(":") == "troubleshoot":
+                    _print_troubleshooting(db_type)
+                    continue
+                params["password"] = pw
+                break
         if db_type == "oracle":
             params["service_name"] = params.pop("database")
     return db_type, params
@@ -453,8 +525,16 @@ def _build_session(args) -> Optional[Session]:
             )
             if not interactive_ok:
                 return None
-            retry = Prompt.ask("Retry connection? (y/N)", default="N")
-            if retry.strip().lower() not in {"y", "yes"}:
+            retry = Prompt.ask(
+                "Retry connection? (y/N/troubleshoot)", default="N"
+            )
+            resp = retry.strip().lower().lstrip(":")
+            if resp == "troubleshoot":
+                _print_troubleshooting(db_type)
+                args.db_type = None
+                attempts += 1
+                continue
+            if resp not in {"y", "yes"}:
                 return None
             args.db_type = None
             attempts += 1
