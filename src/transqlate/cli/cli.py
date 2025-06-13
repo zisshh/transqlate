@@ -116,6 +116,70 @@ _DB_TROUBLESHOOT = {
 # the --tracebacks CLI flag during debugging.
 SHOW_TRACEBACKS = False
 
+# ---------------------------------------------------------------------------
+# Full in-tool user manual displayed by the ``:about`` command
+# ---------------------------------------------------------------------------
+USER_MANUAL = """
+Transqlate converts natural language questions into executable SQL using a
+fine‑tuned Phi‑4 Mini model. It works with SQLite, PostgreSQL, MySQL,
+MSSQL and Oracle databases.
+
+Overview
+--------
+* Connect interactively or pass ``--db-type`` and connection flags.
+* Schema context is automatically extracted and pruned so prompts remain
+  within model limits.
+* Chain‑of‑thought reasoning and the final SQL are shown for each query.
+* Generated SQL is converted from SQLite syntax to your database dialect and
+  table names are schema‑qualified when needed.
+
+REPL Commands
+-------------
+:help        show command list
+:history     show previous queries
+:show schema display formatted schema
+:run         re‑run last SQL
+:edit        edit last SQL before running
+:write       manually enter SQL
+:examples    sample natural language prompts
+:clear       clear the screen
+:changedb    connect to a new database (alias :change_db)
+:about       display this manual
+:exit        quit the program
+
+Command line options
+--------------------
+--interactive                start the interactive REPL
+-q/--question <text>         run one question non‑interactively
+--execute                    execute generated SQL automatically
+--db-type, --db-path, --host, --port, --database, --user, --password
+                             provide connection details
+--model <dir|repo>           fine‑tuned model location
+--max-new-tokens N           maximum tokens to generate (default 2048)
+--tracebacks                 show Python tracebacks for errors
+
+Advanced tips
+-------------
+* Type ``troubleshoot`` at any connection prompt for database specific help.
+* ``:changedb`` clears history and lets you switch databases at any time.
+* Dangerous DDL/DML statements require confirmation before execution.
+* Lost connections trigger a reconnect prompt and optional retry.
+* Increase ``--max-new-tokens`` for very complex queries and use
+  ``--tracebacks`` when debugging.
+
+Example workflow
+----------------
+$ transqlate --interactive
+Choose DB type: sqlite
+SQLite database file path [example.db]: mydata.db
+Transqlate › show all users
+SQL:
+SELECT * FROM users;
+
+Made by Shaurya Sethi
+Contact: shauryaswapansethi@gmail.com
+"""
+
 
 @dataclass
 class HistoryEntry:
@@ -548,7 +612,8 @@ class Session:
                         retry_sql = True
                 else:
                     console.print(
-                        "[red]Reconnection failed. Use :change_db to configure a new connection.[/red]"
+                        "[red]Reconnection failed. Use :changedb to configure a new connection.[/red]"
+                        " [dim](alias :change_db)[/dim]"
                     )
                 if retry_sql and reconnect_ok:
                     try:
@@ -875,8 +940,8 @@ def repl(session: Session, run_sql: bool, max_new_tokens: int):
                     ":write – manually enter a SQL query\n"
                     ":examples – sample NL prompts\n"
                     ":clear – clear screen\n"
-                    ":change_db – switch to a new database connection\n"
-                    ":about – about this tool\n"
+                    ":changedb – switch to a new database connection\n"
+                    ":about – detailed documentation and user manual for this tool\n"
                     ":exit – quit",
                     style="cyan",
                 )
@@ -931,7 +996,7 @@ def repl(session: Session, run_sql: bool, max_new_tokens: int):
                 )
             elif cmd == "clear":
                 console.clear()
-            elif cmd == "change_db":
+            elif cmd in {"changedb", "change_db"}:
                 console.print(
                     Panel(
                         "[yellow]Changing database connection. Your session history will be cleared.[/yellow]",
@@ -958,14 +1023,7 @@ def repl(session: Session, run_sql: bool, max_new_tokens: int):
                     _print_exception(e)
                     console.print("[red]Failed to change database. Connection unchanged.[/red]")
             elif cmd == "about":
-                console.print(
-                    Panel(
-                        "Transqlate CLI allows natural language to SQL translation."\
-                        "\nDetailed documentation coming soon.",
-                        title="About",
-                        style="cyan",
-                    )
-                )
+                console.print(Panel(USER_MANUAL, title="About", style="cyan"))
             else:
                 console.print(f"[red]Unknown command[/red]: {cmd}")
             continue
