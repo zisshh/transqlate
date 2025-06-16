@@ -389,10 +389,17 @@ def _choose_db_interactively(spinner: Optional[_Spinner] = None) -> Tuple[str, d
 
 def _choose_mode() -> str:
     """Prompt the user to pick Database or Spreadsheet mode."""
-    console.print(
-        "Select mode:\n[1] Database (connect to SQLite, Postgres, etc.)\n[2] Spreadsheet/CSV (work with Excel or CSV files)"
+    global _GLOBAL_SPINNER
+    if _GLOBAL_SPINNER:
+        _GLOBAL_SPINNER.stop()
+        _GLOBAL_SPINNER = None
+    prompt_text = (
+        "Select mode:\n"
+        "[1] Database (connect to SQLite, Postgres, etc.)\n"
+        "[2] Spreadsheet/CSV (work with Excel or CSV files)\n"
+        "Enter choice [1/2]"
     )
-    return Prompt.ask("Mode", choices=["1", "2"], default="1")
+    return Prompt.ask(prompt_text, choices=["1", "2"], default="1")
 
 
 def _spreadsheet_to_sqlite(path: str) -> Tuple[str, str]:
@@ -746,9 +753,14 @@ def _build_session(args) -> Optional[Session]:
         mode = _choose_mode()
     if mode == "2":
         while True:
-            path = Prompt.ask("Enter path to your spreadsheet file (.csv, .xlsx, .xls):")
+            path = Prompt.ask(
+                "Enter path to your .csv, .xlsx, or .xls file: "
+            )
             try:
-                temp_db, _ = _spreadsheet_to_sqlite(path)
+                with console.status(
+                    "[bold cyan]Loading spreadsheet...[/bold cyan]", spinner="dots"
+                ):
+                    temp_db, _ = _spreadsheet_to_sqlite(path)
                 db_type = "sqlite"
                 params = {"db_path": temp_db}
                 spreadsheet_mode = True
