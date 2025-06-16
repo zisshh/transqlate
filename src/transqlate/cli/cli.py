@@ -124,7 +124,28 @@ SHOW_TRACEBACKS = False
 # ---------------------------------------------------------------------------
 # Full in-tool user manual displayed by the ``:about`` command
 # ---------------------------------------------------------------------------
-USER_MANUAL = """
+EXPORT_USAGE = ":export [csv|excel] <table name or SQL query> <filename>"
+
+EXPORT_HELP = f"""
+:export — Export query results or tables to CSV or Excel files.
+
+Usage:
+  {EXPORT_USAGE}
+
+Examples:
+  :export csv "SELECT * FROM Orders WHERE Total > 1000" big_orders.csv
+  :export excel Customers customers.xlsx
+
+Notes:
+  - You can export either by specifying a table name or a full SQL query.
+  - To use complex queries, you can copy them from your :history command output.
+    For example:
+      1. Run :history to view past queries.
+      2. Copy a query exactly (including quotes if needed).
+      3. Use it inside :export as shown above.
+"""
+
+USER_MANUAL = f"""
 Transqlate converts natural language questions into executable SQL using a
 fine‑tuned Phi‑4 Mini model. It works with SQLite, PostgreSQL, MySQL,
 MSSQL and Oracle databases. You can also work with Excel or CSV files by
@@ -148,22 +169,6 @@ REPL Commands
 :edit        edit last SQL before running
 :write       manually enter SQL
 
-:export — Export query results or tables to CSV or Excel files.
-
-  Usage:
-    :export [csv|excel] <table name or SQL query> <filename>
-
-  Examples:
-    :export csv "SELECT * FROM Orders WHERE Total > 1000" big_orders.csv
-    :export excel Customers customers.xlsx
-
-  Notes:
-    - You can export either by specifying a table name or a full SQL query.
-    - To use complex queries, you can copy them from your :history command output.
-      For example:
-        1. Run :history to view past queries.
-        2. Copy a query exactly (including quotes if needed).
-        3. Use it inside :export as shown above.
 :examples    sample natural language prompts
 :clear       clear the screen
 :changedb    connect to a new database (alias :change_db)
@@ -171,6 +176,8 @@ REPL Commands
 :changemode  switch between database and spreadsheet modes
 :about       display this manual
 :exit        quit the program
+
+{EXPORT_HELP}
 
 Command line options
 --------------------
@@ -203,25 +210,6 @@ SELECT * FROM users;
 
 Made by Shaurya Sethi
 Contact: shauryaswapansethi@gmail.com
-"""
-
-EXPORT_HELP = """
-:export — Export query results or tables to CSV or Excel files.
-
-Usage:
-  :export [csv|excel] <table name or SQL query> <filename>
-
-Examples:
-  :export csv "SELECT * FROM Orders WHERE Total > 1000" big_orders.csv
-  :export excel Customers customers.xlsx
-
-Notes:
-  - You can export either by specifying a table name or a full SQL query.
-  - To use complex queries, you can copy them from your :history command output.
-    For example:
-      1. Run :history to view past queries.
-      2. Copy a query exactly (including quotes if needed).
-      3. Use it inside :export as shown above.
 """
 
 
@@ -448,21 +436,26 @@ def _spreadsheet_to_sqlite(path: str) -> Tuple[str, str]:
     if not p.exists():
         raise FileNotFoundError(str(p))
     if ext == ".csv":
-        df = pd.read_csv(p)
+        with console.status("[bold cyan]Loading spreadsheet...[/bold cyan]", spinner="dots"):
+            df = pd.read_csv(p)
         sheet = p.stem
     else:
         xl = pd.ExcelFile(p)
         if len(xl.sheet_names) > 1:
             console.print(f"Multiple sheets detected: {', '.join(xl.sheet_names)}")
-            sheet = Prompt.ask("Enter the name of the sheet you want to use", choices=xl.sheet_names, default=xl.sheet_names[0])
+            while True:
+                sheet = Prompt.ask("Please enter the name of the sheet you want to load:")
+                if sheet in xl.sheet_names:
+                    break
+                console.print("[red]Invalid sheet name. Please try again.[/red]")
         else:
             sheet = xl.sheet_names[0]
-        df = pd.read_excel(xl, sheet_name=sheet)
+        with console.status("[bold cyan]Loading spreadsheet...[/bold cyan]", spinner="dots"):
+            df = pd.read_excel(xl, sheet_name=sheet)
     fd, temp_path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
-    conn = sqlite3.connect(temp_path)
-    df.to_sql(sheet, conn, if_exists="replace", index=False)
-    conn.close()
+    with sqlite3.connect(temp_path) as conn:
+        df.to_sql(sheet, conn, if_exists="replace", index=False)
     return temp_path, sheet
 
 # ---------------------------------------------------------------------------
@@ -794,10 +787,7 @@ def _build_session(args) -> Optional[Session]:
                 "Enter path to your .csv, .xlsx, or .xls file: "
             )
             try:
-                with console.status(
-                    "[bold cyan]Loading spreadsheet...[/bold cyan]", spinner="dots"
-                ):
-                    temp_db, _ = _spreadsheet_to_sqlite(path)
+                temp_db, _ = _spreadsheet_to_sqlite(path)
                 db_type = "sqlite"
                 params = {"db_path": temp_db}
                 spreadsheet_mode = True
@@ -939,8 +929,7 @@ def _switch_to_db(session: Session) -> bool:
 def _switch_to_file(session: Session) -> bool:
     path = Prompt.ask("Enter path to your .csv, .xlsx, or .xls file: ")
     try:
-        with console.status("[bold cyan]Loading spreadsheet...[/bold cyan]", spinner="dots"):
-            temp_db, _ = _spreadsheet_to_sqlite(path)
+        temp_db, _ = _spreadsheet_to_sqlite(path)
         new_extractor = get_schema_extractor("sqlite", db_path=temp_db)
         new_schema_dict = new_extractor.extract_schema()
         new_orch = SchemaRAGOrchestrator(session.tokenizer, new_schema_dict)
@@ -1142,17 +1131,16 @@ def repl(session: Session, run_sql: bool, max_new_tokens: int):
                     ":examples – sample NL prompts",
                 ]
                 if session.spreadsheet_mode:
-                    lines.append(":export – export results to CSV/Excel")
+                    lines.append(":export – export results to CSV/Excel (see :about for details)")
                     lines.append(":changefile – switch to a new file")
                 else:
-                    lines.append(":export – export results to CSV/Excel (spreadsheet mode)")
                     lines.append(":changedb – switch to a new database connection")
                 lines.append(":changemode – switch between database and spreadsheet modes")
                 lines.append(":clear – clear screen")
-                lines.append(":about – detailed documentation and user manual for this tool")
+                lines.append(":about – full documentation")
                 lines.append(":exit – quit")
                 console.print("\n".join(lines), style="cyan")
-                console.print(EXPORT_HELP, style="cyan")
+                console.print("For detailed usage and examples, type :about", style="dim")
             elif cmd == "history":
                 for i, entry in enumerate(session.history[-10:], 1):
                     labels = []
@@ -1201,13 +1189,13 @@ def repl(session: Session, run_sql: bool, max_new_tokens: int):
                 else:
                     parts = shlex.split(" ".join(rest))
                     if len(parts) < 3:
-                        console.print(EXPORT_HELP, style="cyan")
+                        console.print(f"Usage:\n  {EXPORT_USAGE}", style="cyan")
                     else:
                         fmt, expr, filename = parts[0], parts[1], parts[2]
                         fmt = fmt.lower()
                         if fmt not in {"csv", "excel"}:
                             console.print("[red]Format must be 'csv' or 'excel'.[/red]")
-                            console.print(EXPORT_HELP, style="cyan")
+                            console.print(f"Usage:\n  {EXPORT_USAGE}", style="cyan")
                         else:
                             sql = expr if expr.lower().startswith("select") else f'SELECT * FROM "{expr}"'
                             try:
