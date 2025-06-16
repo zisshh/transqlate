@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "transqlate"
-version = "0.1.3"
+version = "0.1.4"
 description = "Natural Language to SQL CLI powered by a fine-tuned LLM."
 authors = [
     { name="Shaurya Sethi", email="shauryaswapansethi@gmail.com" }
@@ -13,18 +13,23 @@ readme = "pypi-description.md"
 requires-python = ">=3.8"
 license = { file = "LICENSE" }
 dependencies = [
-    "transformers>=4.37.0",
-    "torch>=2.0.0",
-    "rich",
-    "rapidfuzz",
-    "sentence-transformers",
-    "psycopg2-binary",        # PostgreSQL
-    "mysql-connector-python", # MySQL
-    "pyodbc",                 # MSSQL
-    "cx_Oracle",              # Oracle
-    "pwinput",
-    "pandas",
-    "openpyxl",
+    "cx_oracle==8.3.0",
+    "networkx==3.4.2",
+    "numpy==2.2.5",
+    "pandas==2.2.3",
+    "openpyxl==3.1.5",
+    "psycopg2_binary==2.9.10",
+    "pwinput==1.0.3",
+    "pymssql==2.3.4",
+    "pyodbc==5.2.0",
+    "pytest==8.3.5",
+    "rapidfuzz==3.13.0",
+    "rich==14.0.0",
+    "sentence_transformers==4.1.0",
+    "torch==2.7.0",
+    "bitsandbytes==0.45.5",
+    "accelerate==1.7.0",
+    "huggingface_hub==0.31.2"
 ]
 
 [project.scripts]
