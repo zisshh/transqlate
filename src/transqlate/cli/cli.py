@@ -124,7 +124,7 @@ SHOW_TRACEBACKS = False
 # ---------------------------------------------------------------------------
 # Full in-tool user manual displayed by the ``:about`` command
 # ---------------------------------------------------------------------------
-EXPORT_USAGE = ":export [csv|excel] <table name or SQL query> <filename>"
+EXPORT_USAGE = ":export <csv or excel> <table name or SQL query> <filename>"
 
 EXPORT_HELP = f"""
 :export — Export query results or tables to CSV or Excel files.
