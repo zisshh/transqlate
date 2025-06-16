@@ -147,10 +147,28 @@ REPL Commands
 :run         re‑run last SQL
 :edit        edit last SQL before running
 :write       manually enter SQL
-:export      save table or query results to CSV/Excel (spreadsheet mode)
+
+:export — Export query results or tables to CSV or Excel files.
+
+  Usage:
+    :export [csv|excel] <table name or SQL query> <filename>
+
+  Examples:
+    :export csv "SELECT * FROM Orders WHERE Total > 1000" big_orders.csv
+    :export excel Customers customers.xlsx
+
+  Notes:
+    - You can export either by specifying a table name or a full SQL query.
+    - To use complex queries, you can copy them from your :history command output.
+      For example:
+        1. Run :history to view past queries.
+        2. Copy a query exactly (including quotes if needed).
+        3. Use it inside :export as shown above.
 :examples    sample natural language prompts
 :clear       clear the screen
 :changedb    connect to a new database (alias :change_db)
+:changefile  load a new spreadsheet (spreadsheet mode)
+:changemode  switch between database and spreadsheet modes
 :about       display this manual
 :exit        quit the program
 
@@ -185,6 +203,25 @@ SELECT * FROM users;
 
 Made by Shaurya Sethi
 Contact: shauryaswapansethi@gmail.com
+"""
+
+EXPORT_HELP = """
+:export — Export query results or tables to CSV or Excel files.
+
+Usage:
+  :export [csv|excel] <table name or SQL query> <filename>
+
+Examples:
+  :export csv "SELECT * FROM Orders WHERE Total > 1000" big_orders.csv
+  :export excel Customers customers.xlsx
+
+Notes:
+  - You can export either by specifying a table name or a full SQL query.
+  - To use complex queries, you can copy them from your :history command output.
+    For example:
+      1. Run :history to view past queries.
+      2. Copy a query exactly (including quotes if needed).
+      3. Use it inside :export as shown above.
 """
 
 
@@ -865,6 +902,74 @@ def _build_session(args) -> Optional[Session]:
         temp_db_path=temp_db,
     )
 
+
+def _switch_to_db(session: Session) -> bool:
+    new_db_type, new_params = _choose_db_interactively(_GLOBAL_SPINNER)
+    try:
+        new_extractor = get_schema_extractor(new_db_type, **new_params)
+        new_schema_dict = new_extractor.extract_schema()
+        new_orch = SchemaRAGOrchestrator(session.tokenizer, new_schema_dict)
+        new_table_embs = build_table_embeddings(new_schema_dict, new_orch._embed)
+        try:
+            session.extractor.close()
+        except Exception:
+            pass
+        if session.temp_db_path:
+            try:
+                os.unlink(session.temp_db_path)
+            except Exception:
+                pass
+        session.db_type = new_db_type
+        session.extractor = new_extractor
+        session.schema_dict = new_schema_dict
+        session.orchestrator = new_orch
+        session.table_embs = new_table_embs
+        session.connection_params = new_params
+        session.spreadsheet_mode = False
+        session.temp_db_path = None
+        session.history = []
+        console.print(f"[green]✓ Connected to {new_db_type} database.[/green]")
+        return True
+    except Exception as e:
+        _print_exception(e)
+        console.print("[red]Failed to change database.[/red]")
+        return False
+
+
+def _switch_to_file(session: Session) -> bool:
+    path = Prompt.ask("Enter path to your .csv, .xlsx, or .xls file: ")
+    try:
+        with console.status("[bold cyan]Loading spreadsheet...[/bold cyan]", spinner="dots"):
+            temp_db, _ = _spreadsheet_to_sqlite(path)
+        new_extractor = get_schema_extractor("sqlite", db_path=temp_db)
+        new_schema_dict = new_extractor.extract_schema()
+        new_orch = SchemaRAGOrchestrator(session.tokenizer, new_schema_dict)
+        new_table_embs = build_table_embeddings(new_schema_dict, new_orch._embed)
+        try:
+            session.extractor.close()
+        except Exception:
+            pass
+        if session.temp_db_path:
+            try:
+                os.unlink(session.temp_db_path)
+            except Exception:
+                pass
+        session.db_type = "sqlite"
+        session.extractor = new_extractor
+        session.schema_dict = new_schema_dict
+        session.orchestrator = new_orch
+        session.table_embs = new_table_embs
+        session.connection_params = {"db_path": temp_db}
+        session.spreadsheet_mode = True
+        session.temp_db_path = temp_db
+        session.history = []
+        console.print(f"[green]✓ Loaded file {path}.[/green]")
+        return True
+    except Exception as e:
+        _print_exception(e)
+        console.print("[red]Failed to load spreadsheet.[/red]")
+        return False
+
 def find_sublist_indices(lst, sublst):
     for i in range(len(lst) - len(sublst) + 1):
         if lst[i:i+len(sublst)] == sublst:
@@ -1027,21 +1132,27 @@ def repl(session: Session, run_sql: bool, max_new_tokens: int):
             if cmd in {"exit", "quit", "q"}:
                 break
             elif cmd == "help":
-                console.print(
-                    ":help – show this help\n"
-                    ":history – show past queries\n"
-                    ":show schema – print formatted schema\n"
-                    ":run – re-run last SQL against DB\n"
-                    ":edit – edit last SQL before running\n"
-                    ":write – manually enter a SQL query\n"
-                    ":examples – sample NL prompts\n"
-                    ":export – save a table or query result to CSV/Excel (spreadsheet mode)\n"
-                    ":clear – clear screen\n"
-                    ":changedb – switch to a new database connection\n"
-                    ":about – detailed documentation and user manual for this tool\n"
-                    ":exit – quit",
-                    style="cyan",
-                )
+                lines = [
+                    ":help – show this help",
+                    ":history – show past queries",
+                    ":show schema – print formatted schema",
+                    ":run – re-run last SQL against DB",
+                    ":edit – edit last SQL before running",
+                    ":write – manually enter a SQL query",
+                    ":examples – sample NL prompts",
+                ]
+                if session.spreadsheet_mode:
+                    lines.append(":export – export results to CSV/Excel")
+                    lines.append(":changefile – switch to a new file")
+                else:
+                    lines.append(":export – export results to CSV/Excel (spreadsheet mode)")
+                    lines.append(":changedb – switch to a new database connection")
+                lines.append(":changemode – switch between database and spreadsheet modes")
+                lines.append(":clear – clear screen")
+                lines.append(":about – detailed documentation and user manual for this tool")
+                lines.append(":exit – quit")
+                console.print("\n".join(lines), style="cyan")
+                console.print(EXPORT_HELP, style="cyan")
             elif cmd == "history":
                 for i, entry in enumerate(session.history[-10:], 1):
                     labels = []
@@ -1090,13 +1201,13 @@ def repl(session: Session, run_sql: bool, max_new_tokens: int):
                 else:
                     parts = shlex.split(" ".join(rest))
                     if len(parts) < 3:
-                        console.print("Usage: :export [csv|excel] <table or SQL query> <filename>")
+                        console.print(EXPORT_HELP, style="cyan")
                     else:
-                        fmt = parts[0].lower()
-                        expr = parts[1]
-                        filename = parts[2]
+                        fmt, expr, filename = parts[0], parts[1], parts[2]
+                        fmt = fmt.lower()
                         if fmt not in {"csv", "excel"}:
                             console.print("[red]Format must be 'csv' or 'excel'.[/red]")
+                            console.print(EXPORT_HELP, style="cyan")
                         else:
                             sql = expr if expr.lower().startswith("select") else f'SELECT * FROM "{expr}"'
                             try:
@@ -1108,6 +1219,7 @@ def repl(session: Session, run_sql: bool, max_new_tokens: int):
                                 console.print(f"[green]✓ Exported to {filename}[/green]")
                             except Exception as e:
                                 _print_exception(e)
+                                console.print("[red]Failed to export.[/red]")
             elif cmd == "examples":
                 console.print(
                     "- Show me total sales by month in 2023\n"
@@ -1117,32 +1229,30 @@ def repl(session: Session, run_sql: bool, max_new_tokens: int):
                 )
             elif cmd == "clear":
                 console.clear()
+            elif cmd == "changefile":
+                if not session.spreadsheet_mode:
+                    console.print("[red]:changefile is only available in Spreadsheet mode.[/red]")
+                else:
+                    resp = Prompt.ask("You are about to switch to a new file. Confirm? (y/n)", choices=["y", "n"], default="n")
+                    if resp.lower() != "y":
+                        console.print("[yellow]File switch cancelled.[/yellow]")
+                    else:
+                        _switch_to_file(session)
             elif cmd in {"changedb", "change_db"}:
-                console.print(
-                    Panel(
-                        "[yellow]Changing database connection. Your session history will be cleared.[/yellow]",
-                        style="yellow",
-                    )
-                )
-                new_db_type, new_params = _choose_db_interactively(_GLOBAL_SPINNER)
-                try:
-                    new_extractor = get_schema_extractor(new_db_type, **new_params)
-                    new_schema_dict = new_extractor.extract_schema()
-                    new_tokenizer = session.tokenizer
-                    new_orchestrator = SchemaRAGOrchestrator(new_tokenizer, new_schema_dict)
-                    new_inference = session.inference
-                    new_table_embs = build_table_embeddings(new_schema_dict, new_orchestrator._embed)
-                    session.db_type = new_db_type
-                    session.extractor = new_extractor
-                    session.schema_dict = new_schema_dict
-                    session.orchestrator = new_orchestrator
-                    session.table_embs = new_table_embs
-                    session.connection_params = new_params
-                    session.history = []
-                    console.print(f"[green]✓ Switched to new {new_db_type} database.[/green]")
-                except Exception as e:
-                    _print_exception(e)
-                    console.print("[red]Failed to change database. Connection unchanged.[/red]")
+                if session.spreadsheet_mode:
+                    console.print("[red]:changedb is only available in Database mode.[/red]")
+                else:
+                    resp = Prompt.ask("You are about to switch database. Confirm? (y/n)", choices=["y", "n"], default="n")
+                    if resp.lower() != "y":
+                        console.print("[yellow]Database switch cancelled.[/yellow]")
+                    else:
+                        _switch_to_db(session)
+            elif cmd == "changemode":
+                choice = _choose_mode()
+                if choice == "2":
+                    _switch_to_file(session)
+                else:
+                    _switch_to_db(session)
             elif cmd == "about":
                 console.print(Panel(USER_MANUAL, title="About", style="cyan"))
             else:
