@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "transqlate"
-version = "0.1.2"
+version = "0.1.3"
 description = "Natural Language to SQL CLI powered by a fine-tuned LLM."
 authors = [
     { name="Shaurya Sethi", email="shauryaswapansethi@gmail.com" }

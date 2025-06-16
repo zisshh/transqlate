@@ -2,8 +2,6 @@
 
 > **Latest release:** See the [full list of merged PRs](https://github.com/Shaurya-Sethi/transqlate-phi4/pulls?q=is%3Apr+is%3Aclosed+merged%3A%3E%3D2024-06-13&sort=updated&order=desc)
 
-**Period covered:** 36 merged PRs since June 13, 2025
-
 ---
 
 ## Added
@@ -96,6 +94,35 @@
 - **Production-Ready, Multi-DB Support:** Transqlate now works seamlessly across SQLite, PostgreSQL, MySQL, MSSQL, and Oracle, with robust schema handling and dialect transformation.
 - **CLI-First User Experience:** New commands, interactive history, and resilient reconnection make for a polished CLI suitable for both technical and non-technical users.
 - **Fine-Tuned Model Integration:** All pipelines and workflows now align with the latest fine-tuned Phi-4 Mini model.
+
+---
+
+## What's New in v0.1.3
+
+**Spreadsheet Mode (CSV/Excel) Support & Enhanced Exporting**
+
+* **Spreadsheet/CSV Mode:**
+  You can now use Transqlate with your Excel (`.xlsx`, `.xls`) and CSV files! At startup, select Spreadsheet/CSV mode and provide your file path. The tool will automatically convert your spreadsheet into a temporary SQLite database, enabling you to run natural language queries just like with any database.
+
+* **Multi-Sheet Excel Support:**
+  If your Excel file has multiple sheets, Transqlate will prompt you to choose which sheet to work with, ensuring a seamless experience across complex spreadsheets.
+
+* **Export Results to CSV or Excel:**
+  After running your queries, use the new `:export` command to save results or entire tables as CSV or Excel files for easy sharing and further analysis.
+  Example:
+
+  ```
+  :export csv "SELECT * FROM Orders WHERE Total > 1000" big_orders.csv
+  :export excel Customers customers.xlsx
+  ```
+
+* **Improved Help and Documentation:**
+  The `:help` and `:about` commands have been revamped for clarity, providing concise guidance in the CLI and detailed usage instructions in the manual.
+
+* **Context-Aware Commands:**
+  Command menus and help are now tailored to your current mode, making the CLI cleaner and easier to use.
+
+**Upgrade to v0.1.3 and unlock the power of natural language queries for spreadsheets, with robust export features and a streamlined user experience!**
 
 ---
 
