@@ -1,10 +1,14 @@
 from __future__ import annotations
 import os
+import logging
 import torch
 from transformers.integrations.bitsandbytes import (
     is_bitsandbytes_available,
     _validate_bnb_multi_backend_availability,
 )
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 def detect_device_and_quant(user_opt_out: bool) -> tuple[dict | str, torch.dtype, bool]:
@@ -25,10 +29,10 @@ def detect_device_and_quant(user_opt_out: bool) -> tuple[dict | str, torch.dtype
     if torch.cuda.is_available():
         if is_bitsandbytes_available():
             try:
-                _validate_bnb_multi_backend_availability()
+                _validate_bnb_multi_backend_availability(raise_exception=True)
                 return "auto", torch.bfloat16, True
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("bitsandbytes backend unavailable: %s", exc)
         return "auto", torch.float16, False
 
     if torch.backends.mps.is_available():
