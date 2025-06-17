@@ -21,7 +21,10 @@ import logging
 import re
 import traceback
 import shlex
-import torch
+try:
+    import torch
+except Exception:  # pragma: no cover - optional dependency
+    torch = None
 from getpass import getpass
 from typing import List, Optional, Tuple, Dict
 from dataclasses import dataclass
