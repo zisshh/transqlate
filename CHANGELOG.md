@@ -126,7 +126,7 @@
 
 ---
 
-## What's New in v0.1.4
+## What's New in v0.1.5
 **Portable quantisation gating, CPU-only support, new `--no-quant` flag**
 
 ---

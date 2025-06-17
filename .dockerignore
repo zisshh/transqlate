@@ -1,0 +1,8 @@
+# ignore everything…
+*
+
+# …except what the build needs
+!Dockerfile
+!pyproject.toml
+!requirements.txt
+!src/transqlate/**
