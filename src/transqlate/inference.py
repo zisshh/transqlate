@@ -97,7 +97,7 @@ class NL2SQLInference:
             config = PretrainedConfig()
         if hasattr(config, "quantization_config") and config.quantization_config is None:
             delattr(config, "quantization_config")
-            config = AutoConfig.from_dict(config.to_dict())
+            config = config.__class__.from_dict(config.to_dict())
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
         # Ensure clean decoding
@@ -153,7 +153,7 @@ class NL2SQLInference:
             model_kwargs.pop("quantization_config", None)
             if hasattr(config, "quantization_config"):
                 delattr(config, "quantization_config")
-                config = AutoConfig.from_dict(config.to_dict())
+                config = config.__class__.from_dict(config.to_dict())
                 model_kwargs["config"] = config
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_id_str,

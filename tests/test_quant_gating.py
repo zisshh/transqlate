@@ -108,12 +108,15 @@ def test_retry_with_quant_attr(monkeypatch, mocker):
         def to_dict(self):
             return {}
 
+        @classmethod
+        def from_dict(cls, *a, **k):
+            return cls()
+
     monkeypatch.setattr(
         tfm,
         "AutoConfig",
         types.SimpleNamespace(
             from_pretrained=lambda *a, **k: DummyConfig(),
-            from_dict=lambda *a, **k: DummyConfig(),
         ),
     )
 
