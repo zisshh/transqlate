@@ -77,7 +77,8 @@
 - **Model & CLI**
   - SentenceTransformer loading errors are handled gracefully, with user instructions if download fails.
   - Dataset file path issues in training scripts resolved.
-  - Duplicate imports and old citation placeholders removed from finetuning scripts.
+- Duplicate imports and old citation placeholders removed from finetuning scripts.
+- 4-bit mode now only selected when the `bitsandbytes` package is actually installed. Model loading gracefully retries without quantization if package metadata is missing.
 
 ---
 
