@@ -15,6 +15,8 @@ from typing import Iterable, List, Tuple, Union
 
 import torch
 from transformers import (
+    AutoConfig,
+    PretrainedConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
     TextIteratorStreamer,
@@ -86,25 +88,39 @@ class NL2SQLInference:
             model_path = str(Path(model_id_str).resolve())
         else:
             model_path = hf_model_id(model_id_str)
+
+        try:
+            config = AutoConfig.from_pretrained(model_path)
+        except Exception:
+            config = PretrainedConfig()
+        if hasattr(config, "quantization_config") and config.quantization_config is None:
+            delattr(config, "quantization_config")
+            config = AutoConfig.from_dict(config.to_dict())
+
         self.tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
         # Ensure clean decoding
         self.tokenizer.padding_side = "left"
         self.tokenizer.pad_token = self.tokenizer.eos_token
 
+        model_kwargs = {
+            "torch_dtype": dtype,
+            "device_map": device_map,
+            "config": config,
+        }
+        if quant_config is not None:
+            model_kwargs["quantization_config"] = quant_config
+
         try:
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_id_str,
-                torch_dtype=dtype,
-                device_map=device_map,
-                quantization_config=quant_config,
+                **model_kwargs,
             )
         except RuntimeError as e:
             if use_4bit and "bitsandbytes" in str(e).lower():
+                model_kwargs.pop("quantization_config", None)
                 self.model = AutoModelForCausalLM.from_pretrained(
                     model_id_str,
-                    torch_dtype=dtype,
-                    device_map=device_map,
-                    quantization_config=None,
+                    **model_kwargs,
                 )
                 self.use_4bit = False
             else:
