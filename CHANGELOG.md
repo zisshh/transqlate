@@ -126,5 +126,10 @@
 
 ---
 
+## What's New in v0.1.4
+**Minor fix - update package dependencies**
+
+---
+
 **Full details and previous releases:**  
 [Transqlate on GitHub](https://github.com/Shaurya-Sethi/transqlate-phi4)

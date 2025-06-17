@@ -26,7 +26,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
 
-# ---- Project code ----
+# ---- Project code & CLI install ----
 COPY . .
+RUN pip install .
 
 CMD ["transqlate"]
