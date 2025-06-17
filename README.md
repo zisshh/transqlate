@@ -9,7 +9,7 @@ Transqlate is designed for seamless, safe, and accurate English-to-SQL translati
 * **Fine-tuning**: Trains a small LLM (Phi-4 Mini) for high-accuracy, schema-aware SQL generation using QLoRA and the Unsloth library, leveraging cloud GPUs for scalable training.
 * **Schema Retrieval (RAG)**: Integrates a schema retrieval pipeline to provide the model with only relevant database context, supporting large and complex databases without exceeding model context limits.
 * **Production-Ready CLI**: Offers a robust and user-friendly CLI for interactive query generation, schema exploration, and safe SQL execution with explicit guardrails against dangerous queries.
-* **PyPI Distribution**: The CLI tool is pip-installable and can be run on any system with Python 3.8+.
+* **PyPI Distribution**: The CLI tool is pip-installable and supports Python 3.8–3.12 (Python 3.13 is not yet supported).
 
 ---
 
@@ -96,6 +96,8 @@ This modular architecture is fully integrated into both training and inference p
 
 The CLI tool, installed via pip, allows you to interactively generate, review, and safely execute SQL over any supported database.
 
+Transqlate currently supports Python 3.8 through 3.12.
+
 ### **Installation (via PyPI)**
 
 ```bash
@@ -107,6 +109,27 @@ For spreadsheet mode you will also need `pandas` and `openpyxl`:
 ```bash
 pip install pandas openpyxl
 ```
+
+#### GPU extras (bitsandbytes)
+
+To load the model in 4‑bit quantised mode, install Transqlate with the extra that
+matches your CUDA version. This pulls in the correct PyTorch and `bitsandbytes`
+builds:
+
+```bash
+pip install "transqlate[cuda118]"  # CUDA 11.8
+pip install "transqlate[cuda126]"  # CUDA 12.6
+pip install "transqlate[cuda128]"  # CUDA 12.8
+```
+
+CPU-only users or those on an unsupported Python version can still run
+`transqlate` by disabling quantisation:
+
+```bash
+transqlate --no-quant
+```
+
+or set `TRANSQLATE_NO_QUANT=1` in your environment.
 
 ### **Usage**
 
