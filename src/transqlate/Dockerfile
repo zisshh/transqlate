@@ -3,7 +3,8 @@
 ##############################
 
  # Debian 12 (multi-arch: amd64 & arm64)
-FROM python:3.11.7-slim     
+FROM python:3.11.7-slim
+ARG INSTALL_BNB="false"
 
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1 PYTHONIOENCODING=UTF-8
@@ -24,6 +25,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # ---- Python dependencies ----
 COPY requirements.txt .
+RUN if [ "$INSTALL_BNB" = "false" ]; then \
+        pip install --no-binary :all: --no-deps bitsandbytes || true; \
+    fi
 RUN pip install --no-cache-dir --prefer-binary -r requirements.txt
 
 # ---- Project code & CLI install ----
