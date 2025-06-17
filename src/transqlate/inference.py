@@ -7,6 +7,7 @@
 # ---------------------------------------------------------------------
 
 from __future__ import annotations
+import os
 import re
 import threading
 from pathlib import Path
@@ -17,7 +18,10 @@ from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
     TextIteratorStreamer,
+    BitsAndBytesConfig,
 )
+
+from transqlate.utils.hardware import detect_device_and_quant
 
 PROMPT_TEMPLATE = (
     "Translate this question to SQL: {question}\n"
@@ -51,7 +55,28 @@ class NL2SQLInference:
         model_dir: Union[str, Path] = "model/phi4-transqlate-qlora",
         device_map: Union[str, dict] = "auto",
         dtype: torch.dtype = torch.bfloat16,
+        **kwargs,
     ):
+        no_quant_flag = kwargs.get("quantization") is False
+        env_opt_out = os.getenv("TRANSQLATE_NO_QUANT")
+
+        device_map, dtype, use_4bit = detect_device_and_quant(
+            no_quant_flag or bool(env_opt_out)
+        )
+
+        quant_config = None
+        if use_4bit:
+            quant_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_compute_dtype=torch.bfloat16,
+                bnb_4bit_quant_type="nf4",
+            )
+
+        self.use_4bit = use_4bit
+        self.device_map = device_map
+        self.dtype = dtype
+
         # Ensure forward slashes for HuggingFace repo IDs (remote only)
         def hf_model_id(model_id):
             return str(model_id).replace("\\", "/")
@@ -66,11 +91,24 @@ class NL2SQLInference:
         self.tokenizer.padding_side = "left"
         self.tokenizer.pad_token = self.tokenizer.eos_token
 
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_id_str,
-            torch_dtype=dtype,
-            device_map=device_map,
-        )
+        try:
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_id_str,
+                torch_dtype=dtype,
+                device_map=device_map,
+                quantization_config=quant_config,
+            )
+        except RuntimeError as e:
+            if use_4bit and "bitsandbytes" in str(e).lower():
+                self.model = AutoModelForCausalLM.from_pretrained(
+                    model_id_str,
+                    torch_dtype=dtype,
+                    device_map=device_map,
+                    quantization_config=None,
+                )
+                self.use_4bit = False
+            else:
+                raise
         self.model.eval()
 
     # ------------------------------------------------------------------

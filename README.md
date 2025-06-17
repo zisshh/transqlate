@@ -133,6 +133,19 @@ transqlate -q "Which customers made purchases in March?" --db-path path/to/your.
 
 ![Transqlate CLI Demo](assets/cli-demo.gif)
 
+### Hardware & Quantisation
+
+Transqlate automatically selects the best precision for your system. On CUDA GPUs with a compatible `bitsandbytes` installation, the model loads in 4‑bit NF4 quantised mode. Otherwise it falls back to full precision. Use `--no-quant` or set the environment variable `TRANSQLATE_NO_QUANT=1` to disable quantisation explicitly.
+
+| Host type | BnB present & compatible | Expected load mode |
+| --------- | ----------------------- | ------------------ |
+| CUDA GPU (>=7 GB) | ✔ | 4-bit NF4 quant (bnb) |
+| CUDA GPU | ✖ / incompatible | fp16 |
+| Apple M-series (MPS) | n/a | fp16 |
+| CPU, ≥13 GB RAM | (any) | fp32 |
+| CPU, <13 GB RAM | (any) | graceful error suggesting `transqlate-tiny` |
+| Any host | user sets `--no-quant` or `TRANSQLATE_NO_QUANT=1` | quantisation disabled |
+
 #### **CLI Features**
 
 * Interactive natural language to SQL translation

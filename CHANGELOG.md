@@ -127,7 +127,7 @@
 ---
 
 ## What's New in v0.1.4
-**Minor fix - update package dependencies**
+**Portable quantisation gating, CPU-only support, new `--no-quant` flag**
 
 ---
 
