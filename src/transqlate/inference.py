@@ -151,6 +151,10 @@ class NL2SQLInference:
                 raise
         except importlib.metadata.PackageNotFoundError:
             model_kwargs.pop("quantization_config", None)
+            if hasattr(config, "quantization_config"):
+                delattr(config, "quantization_config")
+                config = AutoConfig.from_dict(config.to_dict())
+                model_kwargs["config"] = config
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_id_str,
                 **model_kwargs,

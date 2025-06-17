@@ -83,3 +83,45 @@ def test_retry_on_pkg_missing(monkeypatch, mocker):
     obj = inf.NL2SQLInference(model_dir="dummy")
     assert mock_model.call_count == 2
     assert obj.use_4bit is False
+
+
+def test_retry_with_quant_attr(monkeypatch, mocker):
+    import torch
+    mocker.patch(
+        "transqlate.utils.hardware.detect_device_and_quant",
+        return_value=("auto", torch.float16, True),
+    )
+    import transqlate.inference as inf
+
+    class DummyModel:
+        def eval(self):
+            pass
+
+    mock_model = mocker.patch(
+        "transformers.AutoModelForCausalLM.from_pretrained",
+        side_effect=[importlib.metadata.PackageNotFoundError("bitsandbytes"), DummyModel()],
+    )
+
+    class DummyConfig:
+        quantization_config = object()
+
+        def to_dict(self):
+            return {}
+
+    monkeypatch.setattr(
+        tfm,
+        "AutoConfig",
+        types.SimpleNamespace(
+            from_pretrained=lambda *a, **k: DummyConfig(),
+            from_dict=lambda *a, **k: DummyConfig(),
+        ),
+    )
+
+    class DummyTok:
+        eos_token = ""
+        pad_token = ""
+
+    mocker.patch("transformers.AutoTokenizer.from_pretrained", return_value=DummyTok())
+    obj = inf.NL2SQLInference(model_dir="dummy")
+    assert mock_model.call_count == 2
+    assert obj.use_4bit is False
