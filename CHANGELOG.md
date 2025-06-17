@@ -79,6 +79,7 @@
   - Dataset file path issues in training scripts resolved.
 - Duplicate imports and old citation placeholders removed from finetuning scripts.
 - 4-bit mode now only selected when the `bitsandbytes` package is actually installed. Model loading gracefully retries without quantization if package metadata is missing.
+- 4-bit models shipped with a `quantization_config` field no longer fail to load when `bitsandbytes` is unavailable.
 
 ---
 
