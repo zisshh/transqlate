@@ -23,6 +23,7 @@ from transformers import (
     TextIteratorStreamer,
     BitsAndBytesConfig,
 )
+import importlib.metadata
 
 from transqlate.utils.hardware import detect_device_and_quant
 
@@ -148,6 +149,13 @@ class NL2SQLInference:
                 self.use_4bit = False
             else:
                 raise
+        except importlib.metadata.PackageNotFoundError:
+            model_kwargs.pop("quantization_config", None)
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_id_str,
+                **model_kwargs,
+            )
+            self.use_4bit = False
         self.model.eval()
 
     # ------------------------------------------------------------------
