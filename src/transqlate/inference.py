@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import re
 import threading
+import warnings
 from pathlib import Path
 from typing import Iterable, List, Tuple, Union
 
@@ -111,17 +112,39 @@ class NL2SQLInference:
             model_kwargs["quantization_config"] = quant_config
 
         try:
-            self.model = AutoModelForCausalLM.from_pretrained(
-                model_id_str,
-                **model_kwargs,
-            )
-        except RuntimeError as e:
-            if use_4bit and "bitsandbytes" in str(e).lower():
-                model_kwargs.pop("quantization_config", None)
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message=(
+                        "You passed `quantization_config` or equivalent parameters to "
+                        "`from_pretrained` but the model you're loading already has a "
+                        "`quantization_config` attribute. The `quantization_config` "
+                        "from the model will be used."
+                    ),
+                    category=UserWarning,
+                )
                 self.model = AutoModelForCausalLM.from_pretrained(
                     model_id_str,
                     **model_kwargs,
                 )
+        except RuntimeError as e:
+            if use_4bit and "bitsandbytes" in str(e).lower():
+                model_kwargs.pop("quantization_config", None)
+                with warnings.catch_warnings():
+                    warnings.filterwarnings(
+                        "ignore",
+                        message=(
+                            "You passed `quantization_config` or equivalent parameters to "
+                            "`from_pretrained` but the model you're loading already has a "
+                            "`quantization_config` attribute. The `quantization_config` "
+                            "from the model will be used."
+                        ),
+                        category=UserWarning,
+                    )
+                    self.model = AutoModelForCausalLM.from_pretrained(
+                        model_id_str,
+                        **model_kwargs,
+                    )
                 self.use_4bit = False
             else:
                 raise
