@@ -23,7 +23,6 @@ from transformers import (
     TextIteratorStreamer,
     BitsAndBytesConfig,
 )
-import importlib.metadata
 
 from transqlate.utils.hardware import detect_device_and_quant
 
@@ -113,58 +112,21 @@ class NL2SQLInference:
         if quant_config is not None:
             model_kwargs["quantization_config"] = quant_config
 
-        try:
-            with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore",
-                    message=(
-                        "You passed `quantization_config` or equivalent parameters to "
-                        "`from_pretrained` but the model you're loading already has a "
-                        "`quantization_config` attribute. The `quantization_config` "
-                        "from the model will be used."
-                    ),
-                    category=UserWarning,
-                )
-                self.model = AutoModelForCausalLM.from_pretrained(
-                    model_id_str,
-                    **model_kwargs,
-                )
-        except RuntimeError as e:
-            if "bitsandbytes" in str(e).lower():
-                model_kwargs.pop("quantization_config", None)
-                if hasattr(config, "quantization_config"):
-                    delattr(config, "quantization_config")
-                    config = config.__class__.from_dict(config.to_dict())
-                    model_kwargs["config"] = config
-                with warnings.catch_warnings():
-                    warnings.filterwarnings(
-                        "ignore",
-                        message=(
-                            "You passed `quantization_config` or equivalent parameters to "
-                            "`from_pretrained` but the model you're loading already has a "
-                            "`quantization_config` attribute. The `quantization_config` "
-                            "from the model will be used."
-                        ),
-                        category=UserWarning,
-                    )
-                    self.model = AutoModelForCausalLM.from_pretrained(
-                        model_id_str,
-                        **model_kwargs,
-                    )
-                self.use_4bit = False
-            else:
-                raise
-        except importlib.metadata.PackageNotFoundError:
-            model_kwargs.pop("quantization_config", None)
-            if hasattr(config, "quantization_config"):
-                delattr(config, "quantization_config")
-                config = config.__class__.from_dict(config.to_dict())
-                model_kwargs["config"] = config
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=(
+                    "You passed `quantization_config` or equivalent parameters to "
+                    "`from_pretrained` but the model you're loading already has a "
+                    "`quantization_config` attribute. The `quantization_config` "
+                    "from the model will be used."
+                ),
+                category=UserWarning,
+            )
             self.model = AutoModelForCausalLM.from_pretrained(
                 model_id_str,
                 **model_kwargs,
             )
-            self.use_4bit = False
         self.model.eval()
 
     # ------------------------------------------------------------------
