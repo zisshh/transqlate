@@ -861,16 +861,7 @@ def _build_session(args) -> Optional[Session]:
         msg = "Downloading model from Hugging Face Hub..."
     with console.status(f"[bold cyan]{msg}[/bold cyan]", spinner="dots"):
         tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
-        try:
-            inference = NL2SQLInference(model_dir=model_id, quantization=not args.no_quant)
-        except RuntimeError:
-            console.print(
-                Panel(
-                    "No compatible GPU detected. Install PyTorch with CUDA from https://pytorch.org and ensure a CUDA-capable GPU is available.",
-                    style="red",
-                )
-            )
-            return None
+        inference = NL2SQLInference(model_dir=model_id, quantization=not args.no_quant)
     dev = inference.model.device
     device_label = "CUDA" if dev.type == "cuda" else "MPS" if dev.type == "mps" else "CPU"
     dtype_label = {
