@@ -861,7 +861,16 @@ def _build_session(args) -> Optional[Session]:
         msg = "Downloading model from Hugging Face Hub..."
     with console.status(f"[bold cyan]{msg}[/bold cyan]", spinner="dots"):
         tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
-        inference = NL2SQLInference(model_dir=model_id, quantization=not args.no_quant)
+        try:
+            inference = NL2SQLInference(model_dir=model_id, quantization=not args.no_quant)
+        except RuntimeError:
+            console.print(
+                Panel(
+                    "No compatible GPU detected. Install PyTorch with CUDA from https://pytorch.org and ensure a CUDA-capable GPU is available.",
+                    style="red",
+                )
+            )
+            return None
     dev = inference.model.device
     device_label = "CUDA" if dev.type == "cuda" else "MPS" if dev.type == "mps" else "CPU"
     dtype_label = {
@@ -869,6 +878,14 @@ def _build_session(args) -> Optional[Session]:
         torch.bfloat16: "bf16",
         torch.float32: "fp32",
     }.get(inference.model.dtype, str(inference.model.dtype))
+    if dev.type == "cpu" and not torch.cuda.is_available():
+        console.print(
+            Panel(
+                "No compatible GPU detected. Transqlate requires CUDA-enabled PyTorch and a GPU.",
+                style="red",
+            )
+        )
+        return None
     quant_msg = "4-bit NF4 quant" if inference.use_4bit else "quantisation disabled"
     if (
         not inference.use_4bit

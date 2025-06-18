@@ -129,8 +129,12 @@ class NL2SQLInference:
                     **model_kwargs,
                 )
         except RuntimeError as e:
-            if use_4bit and "bitsandbytes" in str(e).lower():
+            if "bitsandbytes" in str(e).lower():
                 model_kwargs.pop("quantization_config", None)
+                if hasattr(config, "quantization_config"):
+                    delattr(config, "quantization_config")
+                    config = config.__class__.from_dict(config.to_dict())
+                    model_kwargs["config"] = config
                 with warnings.catch_warnings():
                     warnings.filterwarnings(
                         "ignore",

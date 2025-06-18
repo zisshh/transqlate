@@ -4,6 +4,12 @@
 
 ---
 
+## What's New in v1.0.0
+
+- First stable release on PyPI.
+- `bitsandbytes` is now a core dependency; install CUDA-enabled PyTorch separately.
+- The CLI detects unsupported environments and advises installing PyTorch with CUDA or switching to a GPU-equipped machine.
+
 ## Added
 
 - **Cross-Dialect SQL Post-Processing**
