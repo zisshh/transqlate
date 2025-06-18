@@ -1,6 +1,6 @@
 # Transqlate-Phi4
 
-Transqlate is an end-to-end natural language to SQL pipeline powered by a fine-tuned Phi-4 Mini LLM. This project enables users—both technical and non-technical—to generate complex, schema-aware SQL queries directly from English instructions, with a production-ready command-line interface (CLI) and a modular schema retrieval (RAG) pipeline. The project covers everything from model fine-tuning and schema graph engineering to professional packaging and distribution on PyPI.
+Transqlate is an end-to-end natural language to SQL pipeline powered by a fine-tuned Phi-4 Mini LLM. This project enables users—both technical and non-technical—to generate complex, schema-aware SQL queries  directly from English instructions, with a production-ready command-line interface (CLI) and a modular schema retrieval (RAG) pipeline. The project covers everything from model fine-tuning and schema graph engineering to professional packaging and distribution on PyPI
 
 ## Overview
 
@@ -79,7 +79,7 @@ model = AutoModelForCausalLM.from_pretrained(model_id)
 
 ## Schema Retrieval and RAG Pipeline
 
-The schema retrieval (RAG) pipeline is designed to provide the LLM with only the most relevant tables, columns, and relationships for each query. This ensures scalability to large databases and high accuracy by avoiding context overload.
+The schema retrieval (RAG) pipeline is designed to provide the LLM with only the most relevant tables, columns, and relationships for each query. This ensures scalability to large databases and high-quality SQL generation.
 
 * **Schema Extractor**: Connects to SQLite, PostgreSQL, MySQL, and other databases to extract full schema graphs.
   * Quoted identifiers are preserved: if a table or column name is wrapped in
@@ -100,21 +100,8 @@ Transqlate currently supports Python 3.8 through 3.13.
 
 ### **Installation (via PyPI)**
 
-```bash
-pip install transqlate
-```
-
-For spreadsheet mode you will also need `pandas` and `openpyxl`:
-
-```bash
-pip install pandas openpyxl
-```
-
-#### GPU extras (bitsandbytes)
-
-To load the model in 4‑bit quantised mode, install Transqlate with the extra that
-matches your CUDA version. This pulls in the correct PyTorch and `bitsandbytes`
-builds:
+**Important:**  
+Transqlate-Phi4 will NOT work on non-GPU/CPU-only devices. The model weights are 4-bit quantized and require a CUDA-capable GPU and a working `bitsandbytes` installation for inference. Due to this, only the following installation methods are supported:
 
 ```bash
 pip install "transqlate[cuda118]"  # CUDA 11.8
@@ -122,14 +109,17 @@ pip install "transqlate[cuda126]"  # CUDA 12.6
 pip install "transqlate[cuda128]"  # CUDA 12.8
 ```
 
-CPU-only users or those on an unsupported Python version can still run
-`transqlate` by disabling quantisation:
+**Note:**  
+The following installation will NOT work and is intentionally omitted:
+<!-- pip install transqlate -->
 
-```bash
-transqlate --no-quant
-```
+#### GPU extras (bitsandbytes)
 
-or set `TRANSQLATE_NO_QUANT=1` in your environment.
+To load the model in 4‑bit quantised mode, install Transqlate with the extra that matches your CUDA version. This pulls in the correct PyTorch and `bitsandbytes` builds.
+
+CPU-only users or those on an unsupported Python version cannot run `transqlate` due to the quantised model weights.
+
+---
 
 ### **Usage**
 
@@ -158,16 +148,14 @@ transqlate -q "Which customers made purchases in March?" --db-path path/to/your.
 
 ### Hardware & Quantisation
 
-Transqlate automatically selects the best precision for your system. On CUDA GPUs with a compatible `bitsandbytes` installation, the model loads in 4‑bit NF4 quantised mode. Otherwise it falls back to full precision. Use `--no-quant` or set the environment variable `TRANSQLATE_NO_QUANT=1` to disable quantisation explicitly.
+Transqlate requires a CUDA GPU (with at least 7 GB VRAM) and a compatible `bitsandbytes` installation for loading the fine-tuned 4-bit quantized weights.  
+CPU-only, MPS (Apple Silicon), or incompatible GPU setups are not supported.
 
-| Host type | BnB present & compatible | Expected load mode |
-| --------- | ----------------------- | ------------------ |
-| CUDA GPU (>=7 GB) | ✔ | 4-bit NF4 quant (bnb) |
-| CUDA GPU | ✖ / incompatible | fp16 |
-| Apple M-series (MPS) | n/a | fp16 |
-| CPU, ≥13 GB RAM | (any) | fp32 |
-| CPU, <13 GB RAM | (any) | graceful error suggesting `transqlate-tiny` |
-| Any host | user sets `--no-quant` or `TRANSQLATE_NO_QUANT=1` | quantisation disabled |
+| Host type             | BnB present & compatible | Expected load mode             |
+|-----------------------|-------------------------|-------------------------------|
+| CUDA GPU (>=7 GB)     | ✔                       | 4-bit NF4 quant (bnb)         |
+| CUDA GPU              | ✖ / incompatible        | fp16                          |
+
 
 #### **CLI Features**
 
@@ -254,9 +242,9 @@ This project’s fine-tuning was made possible by the generous research credits 
 
 For questions, feature requests, or collaborations, please contact:
 
-Shaurya Sethi
-[Hugging Face: Shaurya-Sethi](https://huggingface.co/Shaurya-Sethi)
-[Project Model Page](https://huggingface.co/Shaurya-Sethi/transqlate-phi4)
+Shaurya Sethi  
+[Hugging Face: Shaurya-Sethi](https://huggingface.co/Shaurya-Sethi)  
+[Project Model Page](https://huggingface.co/Shaurya-Sethi/transqlate-phi4)  
 Email: [shauryaswapansethi@gmail.com](mailto:shauryaswapansethi@gmail.com)
 
 Feel free to open an issue or pull request on the GitHub repository for bugs, improvements, or contributions.
