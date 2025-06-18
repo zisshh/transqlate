@@ -40,6 +40,7 @@ _DEFAULT_GEN_KWARGS = dict(
 )
 
 _SQL_SPLIT_RE = re.compile(r"\bSQL\s*:\s*", re.IGNORECASE)
+_SCHEMA_SPLIT_RE = re.compile(r"(Schema:|<SCHEMA>)", re.IGNORECASE)
 
 
 class NL2SQLInference:
@@ -210,9 +211,7 @@ class NL2SQLInference:
         gen_ids = out_ids[input_ids.size(1) :]
         gen_text = self.tokenizer.decode(gen_ids, skip_special_tokens=False)
 
-        # --- PATCHED SECTION BELOW ---
-        _SQL_SPLIT_RE = re.compile(r"\bSQL\s*:\s*", re.IGNORECASE)
-        _SCHEMA_SPLIT_RE = re.compile(r"(Schema:|<SCHEMA>)", re.IGNORECASE)
+        # Split generated output to separate COT from SQL
 
         m = _SQL_SPLIT_RE.search(gen_text)
         if m:
