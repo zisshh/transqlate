@@ -100,24 +100,19 @@ Transqlate currently supports Python 3.8 through 3.13.
 
 ### **Installation (via PyPI)**
 
-**Important:**  
-Transqlate-Phi4 will NOT work on non-GPU/CPU-only devices. The model weights are 4-bit quantized and require a CUDA-capable GPU and a working `bitsandbytes` installation for inference. Due to this, only the following installation methods are supported:
+**Important:**
+The fine-tuned model is uploaded in 4‑bit format and currently **requires a CUDA-capable GPU**. CPU-only execution is not supported.
+
+1. Install PyTorch with your CUDA version from [pytorch.org](https://pytorch.org/get-started/locally/).
+2. Then install Transqlate from PyPI:
 
 ```bash
-pip install "transqlate[cuda118]"  # CUDA 11.8
-pip install "transqlate[cuda126]"  # CUDA 12.6
-pip install "transqlate[cuda128]"  # CUDA 12.8
+pip install transqlate
 ```
 
-**Note:**  
-The following installation will NOT work and is intentionally omitted:
-<!-- pip install transqlate -->
+`bitsandbytes` is installed automatically as a dependency and will load the model in 4‑bit mode when a compatible GPU is available.
 
-#### GPU extras (bitsandbytes)
-
-To load the model in 4‑bit quantised mode, install Transqlate with the extra that matches your CUDA version. This pulls in the correct PyTorch and `bitsandbytes` builds.
-
-CPU-only users or those on an unsupported Python version cannot run `transqlate` due to the quantised model weights.
+If you do not have a GPU, this tool cannot be used at the moment.
 
 ---
 

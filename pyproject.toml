@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "transqlate"
-version = "0.1.9"
+version = "1.0.0"
 description = "Natural Language to SQL CLI powered by a fine-tuned LLM."
 authors = [
     { name="Shaurya Sethi", email="shauryaswapansethi@gmail.com" }
@@ -26,28 +26,9 @@ dependencies = [
     "rich==14.0.0",
     "sentence_transformers==4.1.0",
     "transformers==4.51.3",
-    "torch==2.7.0", 
     "accelerate==1.7.0",
+    "bitsandbytes==0.46.0",
     "huggingface_hub==0.31.2"
-]
-
-[project.optional-dependencies]
-# For CUDA 11.8 users:
-cuda118 = [
-    "torch==2.7.0+cu118 ; platform_system=='Linux' and platform_machine=='x86_64'",
-    "bitsandbytes==0.46.0",
-]
-
-# For CUDA 12.6 users:
-cuda126 = [
-    "torch==2.7.0+cu126 ; platform_system=='Linux' and platform_machine=='x86_64'",
-    "bitsandbytes==0.46.0",
-]
-
-# For CUDA 12.8 users:
-cuda128 = [
-    "torch==2.7.0+cu128 ; platform_system=='Linux' and platform_machine=='x86_64'",
-    "bitsandbytes==0.46.0",
 ]
 
 [project.scripts]
