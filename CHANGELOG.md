@@ -134,10 +134,5 @@
 
 ---
 
-## What's New in v0.1.5
-**Portable quantisation gating, CPU-only support, new `--no-quant` flag**
-
----
-
 **Full details and previous releases:**  
 [Transqlate on GitHub](https://github.com/Shaurya-Sethi/transqlate-phi4)
