@@ -1,4 +1,4 @@
-# Transqlate-Phi4
+# Transqlate
 
 Transqlate is an end-to-end natural language to SQL pipeline powered by a fine-tuned Phi-4 Mini LLM. This project enables users—both technical and non-technical—to generate complex, schema-aware SQL queries  directly from English instructions, with a production-ready command-line interface (CLI) and a modular schema retrieval (RAG) pipeline. The project covers everything from model fine-tuning and schema graph engineering to professional packaging and distribution on PyPI
 
