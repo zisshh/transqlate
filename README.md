@@ -57,6 +57,20 @@ Transqlate-Phi4 is built on Microsoft’s Phi-4 Mini-Instruct model, fine-tuned 
 
 3. **Output**: Model checkpoints are saved to `model/phi4-transqlate-qlora/` for later inference and packaging.
 
+### Fine-Tuning Prompt Format
+
+Each training example was formatted as:
+
+```
+Translate this question to SQL: <NL>QUESTION</NL>
+Schema:
+<SCHEMA>TABLES…</SCHEMA>
+
+<COT>REASONING</COT> <SQL>QUERY</SQL> <EXT>EXTRA</EXT>
+```
+
+`SchemaRAGOrchestrator` inserts the `<NL>` tokens around the question before similarity matching so the fine-tuned model always sees the same prompt structure.
+
 ---
 
 ## Model Checkpoints
@@ -89,6 +103,10 @@ The schema retrieval (RAG) pipeline is designed to provide the LLM with only the
 * **RAG Selector**: Selects and injects only the necessary schema subset for each prompt, using similarity and context rules.
 
 This modular architecture is fully integrated into both training and inference pipelines.
+
+`SchemaRAGOrchestrator.build_prompt` wraps the question in `<NL>` tokens and appends
+the formatted schema. During inference, only the `<SCHEMA>…</SCHEMA>` span from this
+prompt is passed to `NL2SQLInference.generate`, which uses its own internal template.
 
 ---
 
