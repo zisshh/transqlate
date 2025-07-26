@@ -6,3 +6,6 @@ __pycache__/
 transqlate.egg-info/
 pypi-description.md
 .clinerules
+codex.md
+benchmark/data/
+.github
