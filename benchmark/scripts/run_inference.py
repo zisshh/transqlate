@@ -15,6 +15,7 @@ from sentence_transformers import SentenceTransformer  # noqa: F401 - document d
 
 from transqlate.inference import NL2SQLInference
 from transqlate.schema_pipeline.orchestrator import SchemaRAGOrchestrator
+from transqlate.embedding_utils import load_sentence_embedder
 
 
 logger = logging.getLogger(__name__)
@@ -104,6 +105,8 @@ def main() -> None:
     schemas = {entry["db_id"]: transform_schema(entry) for entry in table_entries}
 
     inference = NL2SQLInference()
+    embed_model = load_sentence_embedder("all-MiniLM-L6-v2")
+    orchestrators = {}
     predictions = []
 
     for ex in tqdm(examples, desc="Infer", unit="ex"):
@@ -114,7 +117,12 @@ def main() -> None:
             logger.error("Schema for db_id %s not found", db_id)
             predictions.append("")
             continue
-        orchestrator = SchemaRAGOrchestrator(inference.tokenizer, schema)
+        orchestrator = orchestrators.get(db_id)
+        if orchestrator is None:
+            orchestrator = SchemaRAGOrchestrator(
+                inference.tokenizer, schema, embed_model=embed_model
+            )
+            orchestrators[db_id] = orchestrator
         prompt_text, _, _ = orchestrator.build_prompt(question)
         try:
             schema_tokens = extract_schema_token_span(prompt_text, inference.tokenizer)
