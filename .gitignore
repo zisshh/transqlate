@@ -9,3 +9,5 @@ pypi-description.md
 codex.md
 benchmark/data/
 .github
+research-paper/
+streamlit_app/
