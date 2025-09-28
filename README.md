@@ -261,3 +261,4 @@ Shaurya Sethi
 Email: [shauryaswapansethi@gmail.com](mailto:shauryaswapansethi@gmail.com)
 
 Feel free to open an issue or pull request on the GitHub repository for bugs, improvements, or contributions.
+# transqlate
