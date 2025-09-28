@@ -251,14 +251,5 @@ This project’s fine-tuning was made possible by the generous research credits 
 
 ---
 
-## Contact
-
-For questions, feature requests, or collaborations, please contact:
-
-Shaurya Sethi  
-[Hugging Face: Shaurya-Sethi](https://huggingface.co/Shaurya-Sethi)  
-[Project Model Page](https://huggingface.co/Shaurya-Sethi/transqlate-phi4)  
-Email: [shauryaswapansethi@gmail.com](mailto:shauryaswapansethi@gmail.com)
-
 Feel free to open an issue or pull request on the GitHub repository for bugs, improvements, or contributions.
 # transqlate
